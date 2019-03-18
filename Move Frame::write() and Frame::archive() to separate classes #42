@@ -1,3 +1,14 @@
 Before I could get working on the issue of *Move Frame::write() and Frame::archive() to separate classes #42*, I had couple of doubts.
 If these can resolved or answered by any of the moderators here, I'd be more than happy to complete this draft PR, and get to the code.
 Thanks in advance!
+Draft PR, to move Frame::write() and Frame::archive() to separate classes #42
+Before I could get working on the issue of ***Move Frame::write() and Frame::archive() to separate classes #42***, I had couple of doubts.
+If these can resolved or answered by any of the moderators here, I'd be more than happy to complete this draft PR, and get to the code.
+Thanks in advance!
+
+1. Can I use a method of calling itself once before rendering each frame. Basically like, it'd return true on success, false otherwise.
+
+2. And, maybe with the help of a function like
+`int Framearchive(const char* name)
+`and then, moving this function into the main class `FrameWriter` class.
+If it works this way, I can go write a code pertaining to it
