@@ -1,0 +1,3 @@
+Before I could get working on the issue of *Move Frame::write() and Frame::archive() to separate classes #42*, I had couple of doubts.
+If these can resolved or answered by any of the moderators here, I'd be more than happy to complete this draft PR, and get to the code.
+Thanks in advance!
