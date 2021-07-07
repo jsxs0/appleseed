@@ -46,17 +46,14 @@
 #include "boost/chrono/duration.hpp"
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
 
 GlobalSampleAccumulationBuffer::GlobalSampleAccumulationBuffer(
     const size_t    width,
-    const size_t    height,
-    const Filter2f& filter)
-  : m_fb(width, height, 3, filter)
-  , m_filter_rcp_norm_factor(1.0f / compute_normalization_factor(filter))
+    const size_t    height)
+  : m_fb(width, height, 3)
 {
 }
 
@@ -85,8 +82,6 @@ void GlobalSampleAccumulationBuffer::store_samples(
             break;
     }
 
-    const float fw = static_cast<float>(m_fb.get_width());
-    const float fh = static_cast<float>(m_fb.get_height());
     size_t counter = 0;
 
     const Sample* sample_end = samples + sample_count;
@@ -95,13 +90,7 @@ void GlobalSampleAccumulationBuffer::store_samples(
         if ((counter++ & 4096) == 0 && abort_switch.is_aborted())
             return;
 
-        const float fx = s->m_position.x * fw;
-        const float fy = s->m_position.y * fh;
-
-        Color3f value(s->m_color.rgb());
-        value *= m_filter_rcp_norm_factor;
-
-        m_fb.atomic_add(fx, fy, &value[0]);
+        m_fb.atomic_add(Vector2u(s->m_pixel_coords), &s->m_color[0]);
     }
 }
 
@@ -145,7 +134,7 @@ void GlobalSampleAccumulationBuffer::develop_to_frame(
     }
 }
 
-void GlobalSampleAccumulationBuffer::increment_sample_count(const uint64 delta_sample_count)
+void GlobalSampleAccumulationBuffer::increment_sample_count(const std::uint64_t delta_sample_count)
 {
     m_sample_count += delta_sample_count;
 }

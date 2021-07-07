@@ -36,7 +36,7 @@ shader as_noise2d
 [[
     string icon = "asNoise2D.png",
     string help = "Recursive 2D fractal noise.",
-    string URL = "https://appleseed.readthedocs.io/projects/appleseed-maya/en/latest/shaders/texture/as_noise2d.html#label-as-noise2d",
+    string URL = "https://appleseed.readthedocs.io/projects/appleseed-maya/en/latest/shaders/texture/as_noise2d.html",
 
     string as_node_name = "asNoise2D",
     string as_category = "texture2d",
@@ -484,7 +484,7 @@ shader as_noise2d
                 signal = (float) pnoise(
                     noisetype,
                     coords,
-                    point(in_period_x, in_period_y, in_period_time)) ;
+                    point(in_period_x, in_period_y, in_period_time));
             }
             else
             {

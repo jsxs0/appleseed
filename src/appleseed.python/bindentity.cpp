@@ -49,16 +49,6 @@
 namespace bpy = boost::python;
 using namespace foundation;
 using namespace renderer;
-using namespace std;
-
-// Work around a regression in Visual Studio 2015 Update 3.
-#if defined(_MSC_VER) && _MSC_VER == 1900
-namespace boost
-{
-    template <> Entity const volatile* get_pointer<Entity const volatile>(Entity const volatile* p) { return p; }
-    template <> ConnectableEntity const volatile* get_pointer<ConnectableEntity const volatile>(ConnectableEntity const volatile* p) { return p; }
-}
-#endif
 
 namespace
 {
@@ -87,18 +77,15 @@ void bind_entity()
         .def("set_name", &Entity::set_name)
 
         .def("get_parameters", entity_get_parameters)
-        .def("set_parameters", entity_set_parameters)
-        ;
+        .def("set_parameters", entity_set_parameters);
 
     bpy::class_<ConnectableEntity, auto_release_ptr<ConnectableEntity>, bpy::bases<Entity>, boost::noncopyable>("ConnectableEntity", bpy::no_init);
 
     bpy::class_<EntityVector, boost::noncopyable>("EntityVector")
         .def("clear", &EntityVector::clear)
-        .def("__len__", &EntityVector::size)
-        ;
+        .def("__len__", &EntityVector::size);
 
     bpy::class_<EntityMap, boost::noncopyable>("EntityMap")
         .def("clear", &EntityMap::clear)
-        .def("__len__", &EntityMap::size)
-        ;
+        .def("__len__", &EntityMap::size);
 }

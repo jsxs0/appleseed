@@ -34,7 +34,7 @@
 #include "renderer/modeling/surfaceshader/surfaceshader.h"
 
 // appleseed.foundation headers.
-#include "foundation/utility/autoreleaseptr.h"
+#include "foundation/memory/autoreleaseptr.h"
 #include "foundation/utility/kvpair.h"
 
 // appleseed.main headers.
@@ -86,7 +86,9 @@ class APPLESEED_DLLSYMBOL DiagnosticSurfaceShader
         WorldSpaceWireframe,        // world-space wireframe
         ScreenSpaceWireframe,       // screen-space wireframe
         AmbientOcclusion,           // ambient occlusion
+        Assemblies,                 // assign a unique color to each assembly
         AssemblyInstances,          // assign a unique color to each assembly instance
+        Objects,                    // assign a unique color to each object
         ObjectInstances,            // assign a unique color to each object instance
         Primitives,                 // assign a unique color to each primitive
         Materials,                  // assign a unique color to each material
@@ -103,9 +105,6 @@ class APPLESEED_DLLSYMBOL DiagnosticSurfaceShader
     // Return a string identifying the model of this surface shader.
     const char* get_model() const override;
 
-    // This method is called before rendering begins, and whenever rendering is reinitialized
-    // (i.e. because an entity has been edited). At this point, all entities inputs are bound.
-    // Returns true on success, or false if an error occurred or if the abort switch was triggered.
     bool on_render_begin(
         const Project&              project,
         const BaseGroup*            parent,

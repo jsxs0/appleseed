@@ -239,14 +239,15 @@ void CameraController::configure_controller()
     const Vector3d to_target = controller_target - camera_position;
 
     const double target_to_viewing_vector_distance =
-        square_distance_point_line(
-            controller_target,
-            camera_position,
-            camera_direction);
+        std::sqrt(
+            square_distance_point_line(
+                controller_target,
+                camera_position,
+                camera_direction));
 
     // Check whether the target is on the viewing vector and in front of the camera.
     const bool target_is_behind = dot(to_target, camera_direction) < 0.0;
-    const bool target_is_off = target_to_viewing_vector_distance > 1.0e-7;
+    const bool target_is_off = target_to_viewing_vector_distance > 1.0e-4;
     if (has_target && (target_is_behind || target_is_off))
         RENDERER_LOG_WARNING("camera's controller target is off the viewing direction, realigning it.");
 
@@ -278,8 +279,8 @@ Vector2d CameraController::get_mouse_position(const QMouseEvent* event) const
     const int width = m_widget->width();
     const int height = m_widget->height();
 
-    const double x =  static_cast<double>(event->x()) / width;
-    const double y = -static_cast<double>(event->y()) / height;
+    const double x = static_cast<double>(event->x()) / width;
+    const double y = 1.0 - static_cast<double>(event->y()) / height;
 
     return Vector2d(x, y);
 }

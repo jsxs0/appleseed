@@ -37,14 +37,6 @@ namespace bpy = boost::python;
 using namespace foundation;
 using namespace renderer;
 
-// Work around a regression in Visual Studio 2015 Update 3.
-#if defined(_MSC_VER) && _MSC_VER == 1900
-namespace boost
-{
-    template <> Scene const volatile* get_pointer<Scene const volatile>(Scene const volatile* p) { return p; }
-}
-#endif
-
 namespace
 {
     auto_release_ptr<Scene> create_scene()
@@ -63,6 +55,5 @@ void bind_scene()
         .def("set_environment", &Scene::set_environment)
         .def("environment_edfs", &Scene::environment_edfs, bpy::return_value_policy<bpy::reference_existing_object>())
         .def("environment_shaders", &Scene::environment_shaders, bpy::return_value_policy<bpy::reference_existing_object>())
-        .def("compute_bbox", &Scene::compute_bbox)
-        ;
+        .def("compute_bbox", &Scene::compute_bbox);
 }

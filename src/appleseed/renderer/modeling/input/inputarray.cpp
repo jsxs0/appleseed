@@ -36,19 +36,18 @@
 #include "renderer/modeling/input/sourceinputs.h"
 
 // appleseed.foundation headers.
-#include "foundation/platform/types.h"
+#include "foundation/memory/memory.h"
 #include "foundation/utility/foreach.h"
-#include "foundation/utility/memory.h"
 #include "foundation/utility/otherwise.h"
 
 // Standard headers.
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -82,11 +81,11 @@ namespace
 
     struct Input
     {
-        string          m_name;
+        std::string     m_name;
         InputFormat     m_format;
         InputType       m_type;
         bool            m_has_default_value;
-        string          m_default_value;
+        std::string     m_default_value;
         Source*         m_source;
         Entity*         m_entity;
 
@@ -94,25 +93,25 @@ namespace
         {
             switch (m_format)
             {
-              case InputFormatFloat:
+              case InputFormat::Float:
                 size = align_to<float>(size);
                 size += sizeof(float);
                 break;
 
-              case InputFormatSpectralReflectance:
-              case InputFormatSpectralIlluminance:
+              case InputFormat::SpectralReflectance:
+              case InputFormat::SpectralIlluminance:
                 size = align_to<Spectrum>(size);
                 size += sizeof(Spectrum);
                 break;
 
-              case InputFormatSpectralReflectanceWithAlpha:
-              case InputFormatSpectralIlluminanceWithAlpha:
+              case InputFormat::SpectralReflectanceWithAlpha:
+              case InputFormat::SpectralIlluminanceWithAlpha:
                 size = align_to<Spectrum>(size);
                 size += sizeof(Spectrum);
                 size += sizeof(Alpha);
                 break;
 
-              case InputFormatEntity:
+              case InputFormat::Entity:
                 // Nothing to do.
                 break;
 
@@ -122,14 +121,14 @@ namespace
             return size;
         }
 
-        uint8* evaluate(
+        std::uint8_t* evaluate(
             TextureCache&               texture_cache,
             const SourceInputs&         source_inputs,
-            uint8*                      ptr) const
+            std::uint8_t*               ptr) const
         {
             switch (m_format)
             {
-              case InputFormatFloat:
+              case InputFormat::Float:
                 {
                     ptr = align_to<float>(ptr);
                     float* out_scalar = reinterpret_cast<float*>(ptr);
@@ -142,7 +141,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralReflectance:
+              case InputFormat::SpectralReflectance:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -157,7 +156,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralIlluminance:
+              case InputFormat::SpectralIlluminance:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -172,7 +171,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralReflectanceWithAlpha:
+              case InputFormat::SpectralReflectanceWithAlpha:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -194,7 +193,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralIlluminanceWithAlpha:
+              case InputFormat::SpectralIlluminanceWithAlpha:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -216,7 +215,7 @@ namespace
                 }
                 break;
 
-              case InputFormatEntity:
+              case InputFormat::Entity:
                 // Nothing to do.
                 break;
 
@@ -226,11 +225,11 @@ namespace
             return ptr;
         }
 
-        uint8* evaluate_uniform(uint8* ptr) const
+        std::uint8_t* evaluate_uniform(std::uint8_t* ptr) const
         {
             switch (m_format)
             {
-              case InputFormatFloat:
+              case InputFormat::Float:
                 {
                     ptr = align_to<float>(ptr);
                     float* out_scalar = reinterpret_cast<float*>(ptr);
@@ -243,7 +242,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralReflectance:
+              case InputFormat::SpectralReflectance:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -258,7 +257,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralIlluminance:
+              case InputFormat::SpectralIlluminance:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -273,7 +272,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralReflectanceWithAlpha:
+              case InputFormat::SpectralReflectanceWithAlpha:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -295,7 +294,7 @@ namespace
                 }
                 break;
 
-              case InputFormatSpectralIlluminanceWithAlpha:
+              case InputFormat::SpectralIlluminanceWithAlpha:
                 {
                     ptr = align_to<Spectrum>(ptr);
                     Spectrum* out_spectrum = reinterpret_cast<Spectrum*>(ptr);
@@ -317,7 +316,7 @@ namespace
                 }
                 break;
 
-              case InputFormatEntity:
+              case InputFormat::Entity:
                 // Nothing to do.
                 break;
 
@@ -328,7 +327,7 @@ namespace
         }
     };
 
-    typedef vector<Input> InputVector;
+    typedef std::vector<Input> InputVector;
 }
 
 struct InputArray::Impl
@@ -465,7 +464,7 @@ void InputArray::evaluate(
 {
     assert(values);
 
-    uint8* ptr = static_cast<uint8*>(values);
+    std::uint8_t* ptr = static_cast<std::uint8_t*>(values);
 
 #ifdef APPLESEED_USE_SSE
     assert(is_aligned(ptr, 16));
@@ -480,7 +479,7 @@ void InputArray::evaluate_uniforms(
 {
     assert(values);
 
-    uint8* ptr = static_cast<uint8*>(values);
+    std::uint8_t* ptr = static_cast<std::uint8_t*>(values);
 
 #ifdef APPLESEED_USE_SSE
     assert(is_aligned(ptr, 16));

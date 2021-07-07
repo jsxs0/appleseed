@@ -42,9 +42,10 @@
 #include "renderer/utility/paramarray.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
+#include "foundation/image/color.h"
 #include "foundation/image/colorspace.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Forward declarations.
 namespace renderer  { class AOVComponents; }
@@ -52,7 +53,6 @@ namespace renderer  { class PixelContext; }
 namespace renderer  { class ShadingComponents; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -74,11 +74,11 @@ namespace
             const ParamArray&           params)
           : SurfaceShader(name, params)
         {
-            m_inputs.declare("color", InputFormatSpectralIlluminanceWithAlpha);
-            m_inputs.declare("color_multiplier", InputFormatFloat, "1.0");
-            m_inputs.declare("alpha_multiplier", InputFormatFloat, "1.0");
+            m_inputs.declare("color", InputFormat::SpectralIlluminanceWithAlpha);
+            m_inputs.declare("color_multiplier", InputFormat::Float, "1.0");
+            m_inputs.declare("alpha_multiplier", InputFormat::Float, "1.0");
 
-            const string alpha_source = m_params.get_optional<string>("alpha_source", "color");
+            const std::string alpha_source = m_params.get_optional<std::string>("alpha_source", "color");
             if (alpha_source == "color")
                 m_alpha_source = AlphaSourceColor;
             else if (alpha_source == "material")
@@ -120,7 +120,7 @@ namespace
                 &values);
 
             // Initialize the shading result.
-            shading_result.m_main.rgb() = values.m_color.to_rgb(g_std_lighting_conditions);
+            shading_result.m_main.rgb() = values.m_color.illuminance_to_rgb(g_std_lighting_conditions);
 
             // This surface shader can override alpha.
             if (m_alpha_source == AlphaSourceColor)

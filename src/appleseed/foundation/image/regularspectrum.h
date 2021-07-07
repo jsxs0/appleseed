@@ -129,19 +129,19 @@ template <typename T, size_t N> RegularSpectrum<T, N> rcp(const RegularSpectrum<
 template <typename T, size_t N> bool is_saturated(const RegularSpectrum<T, N>& s);
 
 // Clamp the argument to [0,1].
-template <typename T, size_t N> RegularSpectrum<T, N> saturate(const RegularSpectrum<T, N>& s);
+template <typename T, size_t N> APPLESEED_NODISCARD RegularSpectrum<T, N> saturate(const RegularSpectrum<T, N>& s);
 template <typename T, size_t N> void saturate_in_place(RegularSpectrum<T, N>& s);
 
 // Clamp the argument to [min, max].
-template <typename T, size_t N> RegularSpectrum<T, N> clamp(const RegularSpectrum<T, N>& s, const T min, const T max);
+template <typename T, size_t N> APPLESEED_NODISCARD RegularSpectrum<T, N> clamp(const RegularSpectrum<T, N>& s, const T min, const T max);
 template <typename T, size_t N> void clamp_in_place(RegularSpectrum<T, N>& s, const T min, const T max);
 
 // Clamp the argument to [min, +infinity).
-template <typename T, size_t N> RegularSpectrum<T, N> clamp_low(const RegularSpectrum<T, N>& s, const T min);
+template <typename T, size_t N> APPLESEED_NODISCARD RegularSpectrum<T, N> clamp_low(const RegularSpectrum<T, N>& s, const T min);
 template <typename T, size_t N> void clamp_low_in_place(RegularSpectrum<T, N>& s, const T min);
 
 // Clamp the argument to (-infinity, max].
-template <typename T, size_t N> RegularSpectrum<T, N> clamp_high(const RegularSpectrum<T, N>& s, const T max);
+template <typename T, size_t N> APPLESEED_NODISCARD RegularSpectrum<T, N> clamp_high(const RegularSpectrum<T, N>& s, const T max);
 template <typename T, size_t N> void clamp_high_in_place(RegularSpectrum<T, N>& s, const T max);
 
 // Return the smallest or largest signed component of a spectrum.
@@ -171,6 +171,9 @@ template <typename T, size_t N> bool has_nan(const RegularSpectrum<T, N>& s);
 
 // Return true if all components of a spectrum are finite (not NaN, not infinite).
 template <typename T, size_t N> bool is_finite(const RegularSpectrum<T, N>& s);
+
+// Return true if all components of a spectrum are finite (not NaN, not infinite) and non-negative.
+template <typename T, size_t N> bool is_finite_non_neg(const RegularSpectrum<T, N>& s);
 
 
 //
@@ -898,6 +901,18 @@ inline bool is_finite(const RegularSpectrum<T, N>& s)
     for (size_t i = 0; i < N; ++i)
     {
         if (!FP<T>::is_finite(s[i]))
+            return false;
+    }
+
+    return true;
+}
+
+template <typename T, size_t N>
+inline bool is_finite_non_neg(const RegularSpectrum<T, N>& s)
+{
+    for (size_t i = 0; i < N; ++i)
+    {
+        if (!FP<T>::is_finite_non_neg(s[i]))
             return false;
     }
 

@@ -44,33 +44,31 @@
 #include "renderer/utility/bbox.h"
 
 // appleseed.foundation headers.
+#include "foundation/hash/hash.h"
 #include "foundation/image/canvasproperties.h"
 #include "foundation/image/image.h"
 #include "foundation/image/tile.h"
 #include "foundation/math/aabb.h"
-#include "foundation/math/filter.h"
-#include "foundation/math/hash.h"
 #include "foundation/math/ordering.h"
 #include "foundation/math/scalar.h"
 #include "foundation/math/vector.h"
+#include "foundation/memory/autoreleaseptr.h"
 #include "foundation/platform/arch.h"
 #include "foundation/platform/debugger.h"
-#include "foundation/platform/types.h"
-#include "foundation/utility/autoreleaseptr.h"
+#include "foundation/string/string.h"
 #include "foundation/utility/iostreamop.h"
 #include "foundation/utility/job.h"
 #include "foundation/utility/statistics.h"
-#include "foundation/utility/string.h"
 
 // Standard headers.
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -103,7 +101,6 @@ namespace
           , m_aov_accumulators(frame)
           , m_framebuffer_factory(framebuffer_factory)
         {
-            compute_tile_margins(frame, thread_index == 0);
             compute_pixel_ordering(frame);
         }
 
@@ -118,11 +115,11 @@ namespace
         }
 
         void render_tile(
-            const Frame&    frame,
-            const size_t    tile_x,
-            const size_t    tile_y,
-            const uint32    pass_hash,
-            IAbortSwitch&   abort_switch) override
+            const Frame&                        frame,
+            const size_t                        tile_x,
+            const size_t                        tile_y,
+            const std::uint32_t                 pass_hash,
+            IAbortSwitch&                       abort_switch) override
         {
             // Retrieve frame properties.
             const CanvasProperties& frame_properties = frame.image().properties();
@@ -147,13 +144,6 @@ namespace
                     frame.get_crop_window());
             if (!tile_bbox.is_valid())
                 return;
-
-            // Pad the bounding box with tile margins.
-            AABB2i padded_tile_bbox;
-            padded_tile_bbox.min.x = tile_bbox.min.x - m_margin_width;
-            padded_tile_bbox.min.y = tile_bbox.min.y - m_margin_height;
-            padded_tile_bbox.max.x = tile_bbox.max.x + m_margin_width;
-            padded_tile_bbox.max.y = tile_bbox.max.y + m_margin_height;
 
             // Inform the pixel renderer that we are about to render a tile.
             m_pixel_renderer->on_tile_begin(
@@ -186,11 +176,12 @@ namespace
                 if (abort_switch.is_aborted())
                     return;
 
-                // Retrieve the coordinates of the pixel in the padded tile.
+                // Retrieve the coordinates of the pixel in the tile.
+                // todo: switch to Vector2u now that we no longer have pixels outside tiles.
                 const Vector2i pt(m_pixel_ordering[i].x, m_pixel_ordering[i].y);
 
-                // Skip pixels outside the intersection of the padded tile and the crop window.
-                if (!padded_tile_bbox.contains(pt))
+                // Skip pixels outside the intersection of the tile and the crop window.
+                if (!tile_bbox.contains(pt))
                     continue;
 
                 const Vector2i pi(tile_origin_x + pt.x, tile_origin_y + pt.y);
@@ -240,64 +231,35 @@ namespace
         }
 
       protected:
-        auto_release_ptr<IPixelRenderer>    m_pixel_renderer;
-        AOVAccumulatorContainer             m_aov_accumulators;
-        IShadingResultFrameBufferFactory*   m_framebuffer_factory;
-        int                                 m_margin_width;
-        int                                 m_margin_height;
-        vector<Vector<int16, 2>>            m_pixel_ordering;
-
-        void compute_tile_margins(const Frame& frame, const bool primary)
-        {
-            m_margin_width = truncate<int>(ceil(frame.get_filter().get_xradius() - 0.5f));
-            m_margin_height = truncate<int>(ceil(frame.get_filter().get_yradius() - 0.5f));
-
-            const CanvasProperties& properties = frame.image().properties();
-            const size_t padded_tile_width = properties.m_tile_width + 2 * m_margin_width;
-            const size_t padded_tile_height = properties.m_tile_height + 2 * m_margin_height;
-            const size_t padded_pixel_count = padded_tile_width * padded_tile_height;
-            const size_t pixel_count = properties.m_tile_width * properties.m_tile_height;
-            const size_t overhead_pixel_count = padded_pixel_count - pixel_count;
-            const double wasted_effort = static_cast<double>(overhead_pixel_count) / pixel_count * 100.0;
-            const double MaxWastedEffort = 15.0;    // percents
-
-            if (primary)
-            {
-                RENDERER_LOG(
-                    wasted_effort > MaxWastedEffort ? LogMessage::Warning : LogMessage::Info,
-                    "rendering effort wasted by tile borders: %s (tile dimensions: %s x %s, tile margins: %s x %s)",
-                    pretty_percent(overhead_pixel_count, pixel_count).c_str(),
-                    pretty_uint(properties.m_tile_width).c_str(),
-                    pretty_uint(properties.m_tile_height).c_str(),
-                    pretty_uint(2 * m_margin_width).c_str(),
-                    pretty_uint(2 * m_margin_height).c_str());
-            }
-        }
+        auto_release_ptr<IPixelRenderer>        m_pixel_renderer;
+        AOVAccumulatorContainer                 m_aov_accumulators;
+        IShadingResultFrameBufferFactory*       m_framebuffer_factory;
+        std::vector<Vector<std::int16_t, 2>>    m_pixel_ordering;
 
         void compute_pixel_ordering(const Frame& frame)
         {
-            // Compute the dimensions in pixels of the padded tile.
+            // Compute the dimensions in pixels of the tile.
             const CanvasProperties& properties = frame.image().properties();
-            const size_t padded_tile_width = properties.m_tile_width + 2 * m_margin_width;
-            const size_t padded_tile_height = properties.m_tile_height + 2 * m_margin_height;
-            const size_t pixel_count = padded_tile_width * padded_tile_height;
+            const size_t tile_width = properties.m_tile_width;
+            const size_t tile_height = properties.m_tile_height;
+            const size_t pixel_count = tile_width * tile_height;
 
-            // Generate the pixel ordering inside the padded tile.
-            vector<size_t> ordering;
+            // Generate the pixel ordering inside the tile.
+            std::vector<size_t> ordering;
             ordering.reserve(pixel_count);
-            hilbert_ordering(ordering, padded_tile_width, padded_tile_height);
+            hilbert_ordering(ordering, tile_width, tile_height);
             assert(ordering.size() == pixel_count);
 
             // Convert the pixel ordering to a 2D representation.
             m_pixel_ordering.resize(pixel_count);
             for (size_t i = 0; i < pixel_count; ++i)
             {
-                const size_t x = ordering[i] % padded_tile_width;
-                const size_t y = ordering[i] / padded_tile_width;
-                assert(x < padded_tile_width);
-                assert(y < padded_tile_height);
-                m_pixel_ordering[i].x = static_cast<int16>(x) - m_margin_width;
-                m_pixel_ordering[i].y = static_cast<int16>(y) - m_margin_height;
+                const size_t x = ordering[i] % tile_width;
+                const size_t y = ordering[i] / tile_width;
+                assert(x < tile_width);
+                assert(y < tile_height);
+                m_pixel_ordering[i].x = static_cast<std::int16_t>(x);
+                m_pixel_ordering[i].y = static_cast<std::int16_t>(y);
             }
         }
     };

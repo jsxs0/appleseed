@@ -38,10 +38,8 @@
 #include "foundation/image/canvasproperties.h"
 #include "foundation/image/colorspace.h"
 #include "foundation/math/aabb.h"
-#include "foundation/math/filter.h"
 #include "foundation/math/vector.h"
-#include "foundation/platform/types.h"
-#include "foundation/utility/autoreleaseptr.h"
+#include "foundation/memory/autoreleaseptr.h"
 #include "foundation/utility/uid.h"
 
 // appleseed.main headers.
@@ -50,12 +48,15 @@
 // Standard headers.
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 
 // Forward declarations.
 namespace foundation    { class DictionaryArray; }
+namespace foundation    { class FilterSamplingTable; }
 namespace foundation    { class IAbortSwitch; }
 namespace foundation    { class Image; }
 namespace foundation    { class ImageAttributes; }
+namespace foundation    { class SearchPaths; }
 namespace foundation    { class StringArray; }
 namespace foundation    { class StringDictionary; }
 namespace foundation    { class Tile; }
@@ -102,14 +103,20 @@ class APPLESEED_DLLSYMBOL Frame
     // Access the main underlying image.
     foundation::Image& image() const;
 
+    // Access the reference image. Returns nullptr if there is no reference image.
+    foundation::Image* ref_image() const;
+
+    // Returns whether the reference image is compatible with the frame.
+    bool has_valid_ref_image() const;
+
     // Clear the main and AOV images to transparent black.
     void clear_main_and_aov_images();
 
     // Access the AOV images.
     ImageStack& aov_images() const;
 
-    // Return the reconstruction filter used by the main image and the AOV images.
-    const foundation::Filter2f& get_filter() const;
+    // Return the sampling table for the reconstruction filter used by the main image and the AOV images.
+    const foundation::FilterSamplingTable& get_filter_sampling_table() const;
 
     // Return the number of the first pass to be rendered.
     // 0 by default but can be different if a checkpoint was loaded.
@@ -122,14 +129,12 @@ class APPLESEED_DLLSYMBOL Frame
     const foundation::AABB2u& get_crop_window() const;
 
     // Get the noise seed.
-    foundation::uint32 get_noise_seed() const;
+    std::uint32_t get_noise_seed() const;
 
     // Expose asset file paths referenced by this entity to the outside.
     void collect_asset_paths(foundation::StringArray& paths) const override;
     void update_asset_paths(const foundation::StringDictionary& mappings) override;
 
-    // This method is called once before rendering each frame.
-    // Returns true on success, false otherwise.
     bool on_frame_begin(
         const Project&                                  project,
         const BaseGroup*                                parent,
@@ -176,14 +181,16 @@ class APPLESEED_DLLSYMBOL Frame
         const size_t                                thread_count,
         foundation::IAbortSwitch*                   abort_switch) const;
 
-    // Open the checkpoint if the chekpoint resume option is enabled.
+    // Load a checkpoint file from disk if checkpoint resuming is enabled.
     // Returns true if successful, false otherwise.
-    bool load_checkpoint(IShadingResultFrameBufferFactory*  buffer_factory);
+    bool load_checkpoint(
+        IShadingResultFrameBufferFactory*           buffer_factory,
+        const size_t                                pass_count);        // total number of passes to render
 
-    // Create a checkpoint file for the resuming the render at the current pass.
+    // Save a checkpoint file to disk if checkpoint creation is enabled.
     void save_checkpoint(
         IShadingResultFrameBufferFactory*           buffer_factory,
-        const size_t                                pass) const;
+        const size_t                                pass_index) const;  // index of the pass to be written
 
     // Write the main image to disk.
     // Return true if successful, false otherwise.
@@ -222,7 +229,8 @@ class APPLESEED_DLLSYMBOL Frame
     Frame(
         const char*                                 name,
         const ParamArray&                           params,
-        const AOVContainer&                         aovs);
+        const AOVContainer&                         aovs,
+        const foundation::SearchPaths&              search_paths);
 
     // Destructor.
     ~Frame() override;
@@ -254,6 +262,13 @@ class APPLESEED_DLLSYMBOL FrameFactory
         const char*                 name,
         const ParamArray&           params,
         const AOVContainer&         aovs);
+
+    // Create a new frame.
+    static foundation::auto_release_ptr<Frame> create(
+        const char*                     name,
+        const ParamArray&               params,
+        const AOVContainer&             aovs,
+        const foundation::SearchPaths&  search_paths);
 };
 
 

@@ -37,11 +37,13 @@
 #include "renderer/modeling/frame/frame.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/image/color.h"
+#include "foundation/image/colormap.h"
+#include "foundation/image/colormapdata.h"
 #include "foundation/image/image.h"
 #include "foundation/utility/api/apistring.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Standard headers.
 #include <cstddef>
@@ -49,7 +51,6 @@
 #include <string>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -73,50 +74,14 @@ namespace
 
         void post_process_image(const Frame& frame) override
         {
-            static const Color3f Blue(0.0f, 0.0f, 1.0f);
-            static const Color3f Red(1.0f, 0.0f, 0.0f);
-
             const AABB2u& crop_window = frame.get_crop_window();
 
-            // Find the maximum variation.
-            float max_variation = 0.0f;
+            ColorMap color_map;
+            color_map.set_palette_from_array(InfernoColorMapLinearRGB, countof(InfernoColorMapLinearRGB) / 3);
 
-            for (size_t y = crop_window.min.y; y <= crop_window.max.y; ++y)
-            {
-                for (size_t x = crop_window.min.x; x <= crop_window.max.x; ++x)
-                {
-                    Color3f color;
-                    m_image->get_pixel(x, y, color);
-                    max_variation = max(color[0], max_variation);
-                }
-            }
-
-            // Normalize if a maximum was found.
-            if (max_variation != 0.0f)
-            {
-                for (size_t y = crop_window.min.y; y <= crop_window.max.y; ++y)
-                {
-                    for (size_t x = crop_window.min.x; x <= crop_window.max.x; ++x)
-                    {
-                        Color3f color;
-                        m_image->get_pixel(x, y, color);
-
-                        const float c = fit(color[0], 0.0f, max_variation, 0.0f, 1.0f);
-                        assert(c >= 0.0f && c <= 1.0f);
-                        m_image->set_pixel(x, y, lerp(Blue, Red, c));
-                    }
-                }
-            }
-            else
-            {
-                for (size_t y = crop_window.min.y; y <= crop_window.max.y; ++y)
-                {
-                    for (size_t x = crop_window.min.x; x <= crop_window.max.x; ++x)
-                    {
-                        m_image->set_pixel(x, y, Blue);
-                    }
-                }
-            }
+            // Clamps the pixel variation in the red channel between 0 and 1.
+            // No normalization happens here.
+            color_map.remap_red_channel(*m_image, crop_window, 0.0f, 1.0f);
         }
 
         const char* get_model() const override

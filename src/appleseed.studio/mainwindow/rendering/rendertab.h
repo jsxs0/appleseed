@@ -31,14 +31,17 @@
 
 // appleseed.studio headers.
 #include "mainwindow/rendering/cameracontroller.h"
+#include "mainwindow/rendering/materialdrophandler.h"
 #include "mainwindow/rendering/pixelcolortracker.h"
 #include "mainwindow/rendering/pixelinspectorhandler.h"
 #include "mainwindow/rendering/renderclipboardhandler.h"
 #include "mainwindow/rendering/renderregionhandler.h"
 #include "mainwindow/rendering/scenepickinghandler.h"
-#include "utility/mousecoordinatestracker.h"
-#include "utility/scrollareapanhandler.h"
-#include "utility/widgetzoomhandler.h"
+
+// appleseed.qtcommon headers.
+#include "widgets/mousecoordinatestracker.h"
+#include "widgets/scrollareapanhandler.h"
+#include "widgets/widgetzoomhandler.h"
 
 // OpenColorIO headers.
 #include <OpenColorIO/OpenColorIO.h>
@@ -52,9 +55,9 @@ namespace OCIO = OCIO_NAMESPACE;
 #include <memory>
 
 // Forward declarations.
+namespace appleseed { namespace qtcommon { class RenderWidget; } }
 namespace appleseed { namespace studio { class ProjectExplorer; } }
-namespace appleseed { namespace studio { class RenderWidget; } }
-namespace renderer  { class Entity; }
+namespace appleseed { namespace studio { class RenderingManager; } }
 namespace renderer  { class Project; }
 class QComboBox;
 class QLabel;
@@ -78,11 +81,12 @@ class RenderTab
 
   public:
     RenderTab(
-        ProjectExplorer&                project_explorer,
-        renderer::Project&              project,
-        OCIO::ConstConfigRcPtr          ocio_config);
+        ProjectExplorer&        project_explorer,
+        renderer::Project&      project,
+        RenderingManager&       rendering_manager,
+        OCIO::ConstConfigRcPtr  ocio_config);
 
-    RenderWidget* get_render_widget() const;
+    qtcommon::RenderWidget* get_render_widget() const;
     CameraController* get_camera_controller() const;
     ScenePickingHandler* get_scene_picking_handler() const;
 
@@ -98,8 +102,8 @@ class RenderTab
 
     struct State
     {
-        WidgetZoomHandler::State        m_zoom_handler_state;
-        ScrollAreaPanHandler::State     m_pan_handler_state;
+        qtcommon::WidgetZoomHandler::State      m_zoom_handler_state;
+        qtcommon::ScrollAreaPanHandler::State   m_pan_handler_state;
     };
 
     State save_state() const;
@@ -128,33 +132,35 @@ class RenderTab
     void slot_toggle_pixel_inspector(const bool checked);
 
   private:
-    RenderWidget*                               m_render_widget;
-    QScrollArea*                                m_scroll_area;
-    QToolBar*                                   m_toolbar;
-    QToolButton*                                m_set_render_region_button;
-    QToolButton*                                m_clear_render_region_button;
-    QToolButton*                                m_clear_frame_button;
-    QComboBox*                                  m_picking_mode_combo;
-    QLabel*                                     m_info_label;
-    QLabel*                                     m_r_label;
-    QLabel*                                     m_g_label;
-    QLabel*                                     m_b_label;
-    QLabel*                                     m_a_label;
+    qtcommon::RenderWidget*                             m_render_widget;
+    QScrollArea*                                        m_scroll_area;
+    QToolBar*                                           m_toolbar;
+    QToolButton*                                        m_set_render_region_button;
+    QToolButton*                                        m_clear_render_region_button;
+    QToolButton*                                        m_clear_frame_button;
+    QComboBox*                                          m_picking_mode_combo;
+    QLabel*                                             m_info_label;
+    QLabel*                                             m_r_label;
+    QLabel*                                             m_g_label;
+    QLabel*                                             m_b_label;
+    QLabel*                                             m_a_label;
 
-    ProjectExplorer&                            m_project_explorer;
-    renderer::Project&                          m_project;
+    ProjectExplorer&                                    m_project_explorer;
+    renderer::Project&                                  m_project;
+    RenderingManager&                                   m_rendering_manager;
 
-    std::unique_ptr<WidgetZoomHandler>          m_zoom_handler;
-    std::unique_ptr<ScrollAreaPanHandler>       m_pan_handler;
-    std::unique_ptr<MouseCoordinatesTracker>    m_mouse_tracker;
-    std::unique_ptr<PixelColorTracker>          m_pixel_color_tracker;
-    std::unique_ptr<PixelInspectorHandler>      m_pixel_inspector_handler;
-    std::unique_ptr<CameraController>           m_camera_controller;
-    std::unique_ptr<ScenePickingHandler>        m_scene_picking_handler;
-    std::unique_ptr<RenderRegionHandler>        m_render_region_handler;
-    std::unique_ptr<RenderClipboardHandler>     m_clipboard_handler;
+    std::unique_ptr<qtcommon::WidgetZoomHandler>        m_zoom_handler;
+    std::unique_ptr<qtcommon::ScrollAreaPanHandler>     m_pan_handler;
+    std::unique_ptr<MaterialDropHandler>                m_material_drop_handler;
+    std::unique_ptr<qtcommon::MouseCoordinatesTracker>  m_mouse_tracker;
+    std::unique_ptr<PixelColorTracker>                  m_pixel_color_tracker;
+    std::unique_ptr<PixelInspectorHandler>              m_pixel_inspector_handler;
+    std::unique_ptr<CameraController>                   m_camera_controller;
+    std::unique_ptr<ScenePickingHandler>                m_scene_picking_handler;
+    std::unique_ptr<RenderRegionHandler>                m_render_region_handler;
+    std::unique_ptr<RenderClipboardHandler>             m_clipboard_handler;
 
-    OCIO::ConstConfigRcPtr                      m_ocio_config;
+    OCIO::ConstConfigRcPtr                              m_ocio_config;
 
     void create_render_widget();
     void create_toolbar();

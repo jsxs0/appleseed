@@ -70,6 +70,7 @@ class Builder
         const size_t                count);
 
     // Like build() but the points will be moved into the tree rather than copied.
+    // todo: take rvalue reference.
     template <typename Timer>
     void build_move_points(
         std::vector<VectorType>&    points);
@@ -203,6 +204,7 @@ template <typename T, size_t N>
 inline bool Builder<T, N>::PartitionPredicate::operator()(
     const size_t                index) const
 {
+    // Points on the split plane belong to the right child node.
     return m_points[index][m_split.m_dimension] < m_split.m_abscissa;
 }
 

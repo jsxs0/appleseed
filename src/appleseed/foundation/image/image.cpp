@@ -32,13 +32,11 @@
 
 // appleseed.foundation headers.
 #include "foundation/image/tile.h"
-#include "foundation/platform/types.h"
 
 // Standard headers.
 #include <cassert>
+#include <cstdint>
 #include <cstring>
-
-using namespace std;
 
 namespace foundation
 {
@@ -137,7 +135,7 @@ Image::Image(
                 {
                     const size_t ix = tx * m_props.m_tile_width + px;
                     const size_t iy = ty * m_props.m_tile_height + py;
-                    const uint8* source_pixel = source.pixel(ix, iy);
+                    const std::uint8_t* source_pixel = source.pixel(ix, iy);
 
                     Pixel::convert(
                         source_props.m_pixel_format,
@@ -149,6 +147,36 @@ Image::Image(
                         1);
                 }
             }
+        }
+    }
+}
+
+Image::Image(
+    const Image&        source,
+    const PixelFormat   pixel_format,
+    const size_t*       shuffle_table)
+  : m_props(
+        source.properties().m_canvas_width,
+        source.properties().m_canvas_height,
+        source.properties().m_tile_width,
+        source.properties().m_tile_height,
+        Pixel::get_dest_channel_count(source.properties().m_channel_count, shuffle_table),
+        pixel_format
+  )
+{
+    m_tiles = new Tile*[m_props.m_tile_count];
+
+    for (size_t ty = 0; ty < m_props.m_tile_count_y; ++ty)
+    {
+        for (size_t tx = 0; tx < m_props.m_tile_count_x; ++tx)
+        {
+            Tile* tile =
+                new Tile(
+                    source.tile(tx, ty),
+                    source.properties().m_pixel_format,
+                    shuffle_table);
+
+            m_tiles[ty * m_props.m_tile_count_x + tx] = tile;
         }
     }
 }

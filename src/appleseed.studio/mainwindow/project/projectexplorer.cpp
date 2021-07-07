@@ -34,11 +34,15 @@
 #include "mainwindow/project/attributeeditor.h"
 #include "mainwindow/project/itembase.h"
 #include "mainwindow/project/projectitem.h"
+
+// appleseed.qtcommon headers.
 #include "utility/miscellaneous.h"
 
 // Qt headers.
+#include <QDrag>
 #include <QKeySequence>
 #include <QMenu>
+#include <QMimeData>
 #include <QPoint>
 #include <QRect>
 #include <QRegExp>
@@ -51,6 +55,7 @@
 // Standard headers.
 #include <cassert>
 
+using namespace appleseed::qtcommon;
 using namespace foundation;
 using namespace renderer;
 
@@ -94,6 +99,10 @@ ProjectExplorer::ProjectExplorer(
     connect(
         m_tree_widget, SIGNAL(itemActivated(QTreeWidgetItem*, int)),
         SLOT(slot_edit_item(QTreeWidgetItem*, int)));
+
+    connect(
+        m_tree_widget, SIGNAL(itemPressed(QTreeWidgetItem*, int)),
+        SLOT(slot_drag_item(QTreeWidgetItem*, int)));
 
     m_delete_shortcut.reset(
         new QShortcut(QKeySequence(Qt::Key_Delete), m_tree_widget));
@@ -245,6 +254,20 @@ void ProjectExplorer::slot_item_selection_changed()
 void ProjectExplorer::slot_edit_item(QTreeWidgetItem* item, int column)
 {
     static_cast<ItemBase*>(item)->slot_edit();
+}
+
+void ProjectExplorer::slot_drag_item(QTreeWidgetItem* item, int column)
+{
+    if (item && item->flags() & Qt::ItemIsDragEnabled)
+    {
+        QDrag* drag = new QDrag(m_tree_widget);
+        QMimeData* mimeData = new QMimeData();
+
+        mimeData->setText(item->text(column));
+        drag->setMimeData(mimeData);
+
+        drag->exec();
+    }
 }
 
 void ProjectExplorer::slot_delete_items()

@@ -34,8 +34,8 @@
 #include "renderer/modeling/input/inputarray.h"
 
 // appleseed.foundation headers.
+#include "foundation/memory/autoreleaseptr.h"
 #include "foundation/platform/compiler.h"
-#include "foundation/utility/autoreleaseptr.h"
 
 // appleseed.main headers.
 #include "main/dllsymbol.h"
@@ -60,7 +60,6 @@ APPLESEED_DECLARE_INPUT_VALUES(PlasticBRDFInputValues)
     Spectrum        m_specular_reflectance;
     float           m_specular_reflectance_multiplier;
     float           m_roughness;
-    float           m_highlight_falloff;
     float           m_ior;
     float           m_internal_scattering;
 
@@ -95,6 +94,27 @@ class APPLESEED_DLLSYMBOL PlasticBRDFFactory
 
     // Return metadata for the inputs of this BSDF model.
     foundation::DictionaryArray get_input_metadata() const override;
+
+    // Create a new BSDF instance.
+    foundation::auto_release_ptr<BSDF> create(
+        const char*         name,
+        const ParamArray&   params) const override;
+};
+
+
+//
+// Microfacet Plastic BSDF factory.
+//
+
+class APPLESEED_DLLSYMBOL MicrofacetPlasticBRDFFactory
+  : public PlasticBRDFFactory
+{
+  public:
+    // Return a string identifying this BSDF model.
+    const char* get_model() const override;
+
+    // Return metadata for this BSDF model.
+    foundation::Dictionary get_model_metadata() const override;
 
     // Create a new BSDF instance.
     foundation::auto_release_ptr<BSDF> create(

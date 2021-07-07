@@ -36,17 +36,15 @@
 #include "renderer/kernel/shading/directshadingcomponents.h"
 #include "renderer/kernel/shading/shadingcontext.h"
 #include "renderer/modeling/bsdf/bsdf.h"
-#include "renderer/modeling/bsdf/bsdfwrapper.h"
 #include "renderer/utility/paramarray.h"
 
 // appleseed.foundation headers.
-#include "foundation/math/basis.h"
+#include "foundation/containers/dictionary.h"
+#include "foundation/math/dual.h"
 #include "foundation/math/vector.h"
-#include "foundation/platform/types.h"
+#include "foundation/memory/arena.h"
 #include "foundation/utility/api/apistring.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/arena.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Standard headers.
 #include <cassert>
@@ -61,7 +59,6 @@ namespace renderer      { class Project; }
 namespace renderer      { class ShadingPoint; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -74,18 +71,18 @@ namespace
 
     const char* Model = "bsdf_blend";
 
-    class BSDFBlendImpl
+    class BSDFBlend
       : public BSDF
     {
       public:
-        BSDFBlendImpl(
+        BSDFBlend(
             const char*                 name,
             const ParamArray&           params)
           : BSDF(name, Reflective, ScatteringMode::All, params)
         {
-            m_inputs.declare("bsdf0", InputFormatEntity);
-            m_inputs.declare("bsdf1", InputFormatEntity);
-            m_inputs.declare("weight", InputFormatFloat);
+            m_inputs.declare("bsdf0", InputFormat::Entity);
+            m_inputs.declare("bsdf1", InputFormat::Entity);
+            m_inputs.declare("weight", InputFormat::Float);
         }
 
         void release() override
@@ -114,13 +111,13 @@ namespace
             if (m_bsdf[0] == nullptr)
             {
                 RENDERER_LOG_ERROR("while preparing bsdf \"%s\": cannot find bsdf \"%s\".",
-                    get_path().c_str(), m_params.get_optional<string>("bsdf0", "").c_str());
+                    get_path().c_str(), m_params.get_optional<std::string>("bsdf0", "").c_str());
             }
 
             if (m_bsdf[1] == nullptr)
             {
                 RENDERER_LOG_ERROR("while preparing bsdf \"%s\": cannot find bsdf \"%s\".",
-                    get_path().c_str(), m_params.get_optional<string>("bsdf1", "").c_str());
+                    get_path().c_str(), m_params.get_optional<std::string>("bsdf1", "").c_str());
             }
 
             if (m_bsdf[0] == nullptr || m_bsdf[1] == nullptr)
@@ -152,6 +149,8 @@ namespace
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
+            const LocalGeometry&        local_geometry,
+            const Dual3f&               outgoing,
             const int                   modes,
             BSDFSample&                 sample) const override
         {
@@ -169,7 +168,9 @@ namespace
                 sampling_context,
                 values->m_child_inputs[bsdf_index],
                 adjoint,
-                false,              // do not multiply by |cos(incoming, normal)|
+                cosine_mult,
+                local_geometry,
+                outgoing,
                 modes,
                 sample);
         }
@@ -178,8 +179,7 @@ namespace
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes,
@@ -200,9 +200,8 @@ namespace
                     ? m_bsdf[0]->evaluate(
                           values->m_child_inputs[0],
                           adjoint,
-                          false,                // do not multiply by |cos(incoming, normal)|
-                          geometric_normal,
-                          shading_basis,
+                          cosine_mult,
+                          local_geometry,
                           outgoing,
                           incoming,
                           modes,
@@ -216,9 +215,8 @@ namespace
                     ? m_bsdf[1]->evaluate(
                           values->m_child_inputs[1],
                           adjoint,
-                          false,                // do not multiply by |cos(incoming, normal)|
-                          geometric_normal,
-                          shading_basis,
+                          cosine_mult,
+                          local_geometry,
                           outgoing,
                           incoming,
                           modes,
@@ -239,8 +237,7 @@ namespace
         float evaluate_pdf(
             const void*                 data,
             const bool                  adjoint,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes) const override
@@ -259,8 +256,7 @@ namespace
                     ? m_bsdf[0]->evaluate_pdf(
                           values->m_child_inputs[0],
                           adjoint,
-                          geometric_normal,
-                          shading_basis,
+                          local_geometry,
                           outgoing,
                           incoming,
                           modes)
@@ -272,8 +268,7 @@ namespace
                     ? m_bsdf[1]->evaluate_pdf(
                           values->m_child_inputs[1],
                           adjoint,
-                          geometric_normal,
-                          shading_basis,
+                          local_geometry,
                           outgoing,
                           incoming,
                           modes)
@@ -300,8 +295,6 @@ namespace
 
         const BSDF* m_bsdf[2];
     };
-
-    typedef BSDFWrapper<BSDFBlendImpl, false> BSDFBlend;
 }
 
 

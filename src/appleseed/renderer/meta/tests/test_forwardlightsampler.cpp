@@ -34,7 +34,7 @@
 #include "renderer/modeling/scene/scene.h"
 
 // appleseed.foundation headers.
-#include "foundation/utility/autoreleaseptr.h"
+#include "foundation/memory/autoreleaseptr.h"
 #include "foundation/utility/test.h"
 
 using namespace foundation;
@@ -42,7 +42,7 @@ using namespace renderer;
 
 TEST_SUITE(Renderer_Kernel_Lighting_ForwardLightSampler)
 {
-    TEST_CASE(HasLightsOrEmittingTriangles_GivenEmptyScene_ReturnsFalse)
+    TEST_CASE(HasLights_GivenEmptyScene_ReturnsFalse)
     {
         auto_release_ptr<Scene> scene(SceneFactory::create());
         scene->cameras().insert(PinholeCameraFactory().create("camera", ParamArray()));

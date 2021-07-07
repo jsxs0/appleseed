@@ -47,14 +47,6 @@ namespace bpy = boost::python;
 using namespace foundation;
 using namespace renderer;
 
-// Work around a regression in Visual Studio 2015 Update 3.
-#if defined(_MSC_VER) && _MSC_VER == 1900
-namespace boost
-{
-    template <> ColorEntity const volatile* get_pointer<ColorEntity const volatile>(ColorEntity const volatile* p) { return p; }
-}
-#endif
-
 namespace
 {
     ColorValueArray color_value_array_from_bpy_list(const bpy::list& vals)
@@ -139,8 +131,7 @@ void bind_color()
         .value("LinearRGB", ColorSpaceLinearRGB)
         .value("SRGB", ColorSpaceSRGB)
         .value("CIEXYZ", ColorSpaceCIEXYZ)
-        .value("Spectral", ColorSpaceSpectral)
-        ;
+        .value("Spectral", ColorSpaceSpectral);
 
     bpy::class_<ColorEntity, auto_release_ptr<ColorEntity>, bpy::bases<Entity>, boost::noncopyable>("ColorEntity", bpy::no_init)
         .def("__init__", bpy::make_constructor(create_color_entity))
@@ -150,8 +141,7 @@ void bind_color()
         .def("get_alpha", color_entity_get_alpha)
         .def("get_color_space", &ColorEntity::get_color_space)
         .def("get_wavelength_range", &ColorEntity::get_wavelength_range, bpy::return_value_policy<bpy::copy_const_reference>())
-        .def("get_multiplier", &ColorEntity::get_multiplier)
-        ;
+        .def("get_multiplier", &ColorEntity::get_multiplier);
 
     bind_typed_entity_vector<ColorEntity>("ColorContainer");
 }

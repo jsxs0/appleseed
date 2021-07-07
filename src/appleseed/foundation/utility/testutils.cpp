@@ -37,6 +37,7 @@
 #include "foundation/image/genericimagefilewriter.h"
 #include "foundation/image/image.h"
 #include "foundation/image/pixel.h"
+#include "foundation/math/aabb.h"
 #include "foundation/math/scalar.h"
 
 // Standard headers.
@@ -44,33 +45,31 @@
 #include <fstream>
 #include <sstream>
 
-using namespace std;
-
 namespace foundation
 {
 
-bool load_text_file(const string& filename, string& contents)
+bool load_text_file(const std::string& filename, std::string& contents)
 {
-    ifstream file(filename.c_str());
+    std::ifstream file(filename.c_str());
 
     if (!file.is_open())
         return false;
 
-    stringstream sstr;
+    std::stringstream sstr;
     sstr << file.rdbuf();
     contents = sstr.str();
 
     return true;
 }
 
-bool compare_text_files(const string& filename1, const string& filename2)
+bool compare_text_files(const std::string& filename1, const std::string& filename2)
 {
-    string contents1;
+    std::string contents1;
 
     if (!load_text_file(filename1, contents1))
         return false;
 
-    string contents2;
+    std::string contents2;
 
     if (!load_text_file(filename2, contents2))
         return false;
@@ -96,37 +95,52 @@ bool are_images_feq(
 
     assert(channel_count <= 4);
 
-    size_t differing_pixels = 0;
-
     for (size_t y = 0; y < height; ++y)
     {
         for (size_t x = 0; x < width; ++x)
         {
             float color1[4];
-            image1.get_pixel(x, y, color1);
+            image1.get_pixel(x, y, color1, channel_count);
 
             float color2[4];
-            image2.get_pixel(x, y, color2);
+            image2.get_pixel(x, y, color2, channel_count);
 
             for (size_t c = 0; c < channel_count; ++c)
             {
                 if (!feq(color1[c], color2[c], eps))
-                {
-                    ++differing_pixels;
-                    break;
-                }
+                    return false;
             }
         }
     }
 
-    return differing_pixels == 0;
+    return true;
+}
+
+void fit_point_cloud_to_image(
+    std::vector<Vector2d>&           points)
+{
+    AABB2d aabb;
+    aabb.invalidate();
+
+    for (const Vector2d& p : points)
+        aabb.insert(p);
+
+    const Vector2d aabb_extent = aabb.extent();
+    const double scale = 0.8 / max_value(aabb_extent);
+
+    for (Vector2d& p : points)
+    {
+        p -= aabb.min;
+        p *= scale;
+        p += (Vector2d(1.0) - aabb_extent * scale) * 0.5;
+    }
 }
 
 void write_point_cloud_image(
-    const string&               image_path,
-    const size_t                image_width,
-    const size_t                image_height,
-    const vector<Vector2d>&     points)
+    const std::string&               image_path,
+    const size_t                     image_width,
+    const size_t                     image_height,
+    const std::vector<Vector2d>&     points)
 {
     Image image(
         image_width,
@@ -147,8 +161,8 @@ void write_point_cloud_image(
 }
 
 void write_point_cloud_image(
-    const string&               image_path,
-    const vector<Vector2d>&     points)
+    const std::string&               image_path,
+    const std::vector<Vector2d>&     points)
 {
     write_point_cloud_image(
         image_path,

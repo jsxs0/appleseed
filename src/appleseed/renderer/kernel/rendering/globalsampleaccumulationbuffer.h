@@ -33,14 +33,13 @@
 #include "renderer/kernel/rendering/sampleaccumulationbuffer.h"
 
 // appleseed.foundation headers.
-#include "foundation/image/filteredtile.h"
-#include "foundation/math/filter.h"
+#include "foundation/image/accumulatortile.h"
 #include "foundation/platform/compiler.h"
 #include "foundation/platform/thread.h"
-#include "foundation/platform/types.h"
 
 // Standard headers.
 #include <cstddef>
+#include <cstdint>
 
 // Forward declarations.
 namespace foundation    { class IAbortSwitch; }
@@ -58,8 +57,7 @@ class GlobalSampleAccumulationBuffer
     // Constructor.
     GlobalSampleAccumulationBuffer(
         const size_t                width,
-        const size_t                height,
-        const foundation::Filter2f& filter);
+        const size_t                height);
 
     // Reset the buffer to its initial state. Thread-safe.
     void clear() override;
@@ -76,12 +74,11 @@ class GlobalSampleAccumulationBuffer
         foundation::IAbortSwitch&   abort_switch) override;
 
     // Increment the number of samples used for pixel values renormalization. Thread-safe.
-    void increment_sample_count(const foundation::uint64 delta_sample_count);
+    void increment_sample_count(const std::uint64_t delta_sample_count);
 
   private:
     boost::shared_mutex             m_mutex;
-    foundation::FilteredTile        m_fb;
-    const float                     m_filter_rcp_norm_factor;
+    foundation::AccumulatorTile     m_fb;
 
     void develop_to_tile(
         foundation::Tile&           tile,

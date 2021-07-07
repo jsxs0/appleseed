@@ -36,14 +36,16 @@
 #include "renderer/modeling/bsdf/bsdf.h"
 #include "renderer/modeling/bsdf/bsdfsample.h"
 #include "renderer/modeling/bsdf/bsdfwrapper.h"
+#include "renderer/modeling/bsdf/microfacetbrdfwrapper.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/math/basis.h"
+#include "foundation/math/dual.h"
 #include "foundation/math/sampling/mappings.h"
 #include "foundation/math/scalar.h"
 #include "foundation/math/vector.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Standard headers.
 #include <cmath>
@@ -54,7 +56,6 @@ namespace renderer      { class Assembly; }
 namespace renderer      { class Project; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -66,6 +67,7 @@ namespace
     //
 
     const char* Model = "lambertian_brdf";
+    const char* MicrofacetModel = "microfacet_normal_mapping_lambertian_brdf";
 
     class LambertianBRDFImpl
       : public BSDF
@@ -76,8 +78,8 @@ namespace
             const ParamArray&           params)
           : BSDF(name, Reflective, ScatteringMode::Diffuse, params)
         {
-            m_inputs.declare("reflectance", InputFormatSpectralReflectance);
-            m_inputs.declare("reflectance_multiplier", InputFormatFloat, "1.0");
+            m_inputs.declare("reflectance", InputFormat::SpectralReflectance);
+            m_inputs.declare("reflectance_multiplier", InputFormat::Float, "1.0");
         }
 
         void release() override
@@ -95,6 +97,8 @@ namespace
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
+            const LocalGeometry&        local_geometry,
+            const Dual3f&               outgoing,
             const int                   modes,
             BSDFSample&                 sample) const override
         {
@@ -105,7 +109,7 @@ namespace
             sampling_context.split_in_place(2, 1);
             const Vector2f s = sampling_context.next2<Vector2f>();
             const Vector3f wi = sample_hemisphere_cosine(s);
-            sample.m_incoming = Dual3f(sample.m_shading_basis.transform_to_parent(wi));
+            sample.m_incoming = Dual3f(local_geometry.m_shading_basis.transform_to_parent(wi));
 
             // Compute the probability density of the sampled direction.
             const float probability = wi.y * RcpPi<float>();
@@ -119,13 +123,13 @@ namespace
                 // Compute the BRDF value.
                 const LambertianBRDFInputValues* values = static_cast<const LambertianBRDFInputValues*>(data);
                 sample.m_value.m_diffuse = values->m_reflectance;
-                sample.m_value.m_diffuse *= values->m_reflectance_multiplier * RcpPi<float>();
+                sample.m_value.m_diffuse *= values->m_reflectance_multiplier;
+                sample.m_aov_components.m_albedo = sample.m_value.m_diffuse;
+                sample.m_value.m_diffuse *= RcpPi<float>();
                 sample.m_value.m_beauty = sample.m_value.m_diffuse;
-
-                sample.m_aov_components.m_albedo = values->m_reflectance;
                 sample.m_min_roughness = 1.0f;
 
-                sample.compute_reflected_differentials();
+                sample.compute_diffuse_differentials(outgoing);
             }
         }
 
@@ -133,8 +137,7 @@ namespace
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes,
@@ -150,16 +153,15 @@ namespace
             value.m_beauty = value.m_diffuse;
 
             // Return the probability density of the sampled direction.
-            const Vector3f& n = shading_basis.get_normal();
-            const float cos_in = abs(dot(incoming, n));
+            const Vector3f& n = local_geometry.m_shading_basis.get_normal();
+            const float cos_in = std::abs(dot(incoming, n));
             return cos_in * RcpPi<float>();
         }
 
         float evaluate_pdf(
             const void*                 data,
             const bool                  adjoint,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes) const override
@@ -168,13 +170,26 @@ namespace
                 return 0.0f;
 
             // Return the probability density of the sampled direction.
-            const Vector3f& n = shading_basis.get_normal();
-            const float cos_in = abs(dot(incoming, n));
+            const Vector3f& n = local_geometry.m_shading_basis.get_normal();
+            const float cos_in = std::abs(dot(incoming, n));
             return cos_in * RcpPi<float>();
         }
     };
 
+    class MicrofacetLambertianBRDFImpl
+      : public LambertianBRDFImpl
+    {
+      public:
+        using LambertianBRDFImpl::LambertianBRDFImpl;
+
+        const char* get_model() const override
+        {
+            return MicrofacetModel;
+        }
+    };
+
     typedef BSDFWrapper<LambertianBRDFImpl> LambertianBRDF;
+    typedef MicrofacetBRDFWrapper<MicrofacetLambertianBRDFImpl> MicrofacetLambertianBRDF;
 }
 
 
@@ -234,6 +249,31 @@ auto_release_ptr<BSDF> LambertianBRDFFactory::create(
     const ParamArray&   params) const
 {
     return auto_release_ptr<BSDF>(new LambertianBRDF(name, params));
+}
+
+
+//
+// MicrofacetLambertianBRDFFactory class implementation.
+//
+
+const char* MicrofacetLambertianBRDFFactory::get_model() const
+{
+    return MicrofacetModel;
+}
+
+Dictionary MicrofacetLambertianBRDFFactory::get_model_metadata() const
+{
+    return
+        Dictionary()
+            .insert("name", MicrofacetModel)
+            .insert("label", "Microfacet Lambertian BRDF");
+}
+
+auto_release_ptr<BSDF> MicrofacetLambertianBRDFFactory::create(
+    const char*         name,
+    const ParamArray&   params) const
+{
+    return auto_release_ptr<BSDF>(new MicrofacetLambertianBRDF(name, params));
 }
 
 }   // namespace renderer

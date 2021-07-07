@@ -39,7 +39,7 @@ namespace renderer
 class Sample
 {
   public:
-    foundation::Vector2f    m_position;
+    foundation::Vector2i    m_pixel_coords;
     foundation::Color4f     m_color;
 };
 

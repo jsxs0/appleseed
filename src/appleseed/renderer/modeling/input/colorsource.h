@@ -31,12 +31,15 @@
 
 // appleseed.renderer headers.
 #include "renderer/global/globaltypes.h"
+#include "renderer/modeling/input/inputarray.h"
 #include "renderer/modeling/input/source.h"
 
 // appleseed.foundation headers.
 #include "foundation/image/color.h"
 #include "foundation/platform/compiler.h"
-#include "foundation/platform/types.h"
+
+// Standard headers.
+#include <cstdint>
 
 // Forward declarations.
 namespace renderer  { class ColorEntity; }
@@ -53,13 +56,13 @@ class ColorSource
 {
   public:
     // Constructor.
-    explicit ColorSource(const ColorEntity& color_entity);
+    explicit ColorSource(const ColorEntity& color_entity, const InputFormat format);
 
     // Retrieve the color entity used by this source.
     const ColorEntity& get_color_entity() const;
 
     // Compute a signature unique to this source.
-    foundation::uint64 compute_signature() const override;
+    std::uint64_t compute_signature() const override;
 
     // Return hints allowing to treat this source as one of another type.
     Hints get_hints() const override;
@@ -87,8 +90,8 @@ class ColorSource
     Spectrum                        m_spectrum;
     Alpha                           m_alpha;
 
-    void initialize_from_spectrum(const ColorEntity& color_entity);
-    void initialize_from_color3(const ColorEntity& color_entity);
+    void initialize_from_spectrum(const ColorEntity& color_entity, const Spectrum::Intent intent);
+    void initialize_from_color3(const ColorEntity& color_entity, const Spectrum::Intent intent);
 };
 
 

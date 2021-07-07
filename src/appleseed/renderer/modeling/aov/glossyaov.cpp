@@ -37,16 +37,15 @@
 #include "renderer/modeling/color/colorspace.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/image/color.h"
 #include "foundation/utility/api/apistring.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Standard headers.
 #include <cstddef>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -74,8 +73,8 @@ namespace
             ShadingResult&              shading_result) override
         {
             shading_result.m_aovs[m_index].rgb() =
-                shading_components.m_glossy.to_rgb(g_std_lighting_conditions) +
-                shading_components.m_indirect_glossy.to_rgb(g_std_lighting_conditions);
+                shading_components.m_glossy.reflectance_to_rgb(g_std_lighting_conditions) +
+                shading_components.m_indirect_glossy.reflectance_to_rgb(g_std_lighting_conditions);
 
             shading_result.m_aovs[m_index].a = shading_result.m_main.a;
         }
@@ -106,7 +105,7 @@ namespace
             ShadingResult&              shading_result) override
         {
             shading_result.m_aovs[m_index].rgb() =
-                shading_components.m_glossy.to_rgb(g_std_lighting_conditions);
+                shading_components.m_glossy.reflectance_to_rgb(g_std_lighting_conditions);
 
             shading_result.m_aovs[m_index].a = shading_result.m_main.a;
         }
@@ -137,7 +136,7 @@ namespace
             ShadingResult&              shading_result) override
         {
             shading_result.m_aovs[m_index].rgb() =
-                shading_components.m_indirect_glossy.to_rgb(g_std_lighting_conditions);
+                shading_components.m_indirect_glossy.reflectance_to_rgb(g_std_lighting_conditions);
 
             shading_result.m_aovs[m_index].a = shading_result.m_main.a;
         }

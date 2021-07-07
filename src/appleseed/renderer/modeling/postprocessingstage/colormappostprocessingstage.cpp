@@ -32,14 +32,17 @@
 // appleseed.renderer headers.
 #include "renderer/global/globallogger.h"
 #include "renderer/modeling/frame/frame.h"
-#include "renderer/modeling/postprocessingstage/colormapdata.h"
 #include "renderer/modeling/postprocessingstage/postprocessingstage.h"
 #include "renderer/modeling/project/project.h"
 #include "renderer/utility/messagecontext.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/image/canvasproperties.h"
 #include "foundation/image/color.h"
+#include "foundation/image/colormap.h"
+#include "foundation/image/colormapdata.h"
+#include "foundation/image/conversion.h"
 #include "foundation/image/genericimagefilereader.h"
 #include "foundation/image/image.h"
 #include "foundation/image/text/textrenderer.h"
@@ -48,15 +51,15 @@
 #include "foundation/math/scalar.h"
 #include "foundation/math/vector.h"
 #include "foundation/platform/defaulttimers.h"
+#include "foundation/platform/types.h"
+#include "foundation/string/string.h"
 #include "foundation/utility/api/apistring.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 #include "foundation/utility/countof.h"
 #include "foundation/utility/makevector.h"
 #include "foundation/utility/otherwise.h"
 #include "foundation/utility/searchpaths.h"
 #include "foundation/utility/stopwatch.h"
-#include "foundation/utility/string.h"
 
 // Standard headers.
 #include <algorithm>
@@ -68,7 +71,6 @@
 #include <vector>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -130,29 +132,31 @@ namespace
         {
             const OnFrameBeginMessageContext context("post-processing stage", this);
 
-            const string color_map =
-                m_params.get_optional<string>(
+            const std::string color_map =
+                m_params.get_optional<std::string>(
                     "color_map",
                     "inferno",
-                    make_vector("inferno", "jet", "magma", "plasma", "viridis", "custom"),
+                    make_vector("inferno", "jet", "magma", "plasma", "viridis", "turbo", "custom"),
                     context);
 
             if (color_map == "inferno")
-                set_palette_from_array(InfernoColorMap, countof(InfernoColorMap) / 3);
+                m_color_map.set_palette_from_array(InfernoColorMapLinearRGB, countof(InfernoColorMapLinearRGB) / 3);
             else if (color_map == "jet")
-                set_palette_from_array(JetColorMap, countof(JetColorMap) / 3);
+                m_color_map.set_palette_from_array(JetColorMapLinearRGB, countof(JetColorMapLinearRGB) / 3);
             else if (color_map == "magma")
-                set_palette_from_array(MagmaColorMap, countof(MagmaColorMap) / 3);
+                m_color_map.set_palette_from_array(MagmaColorMapLinearRGB, countof(MagmaColorMapLinearRGB) / 3);
             else if (color_map == "plasma")
-                set_palette_from_array(PlasmaColorMap, countof(PlasmaColorMap) / 3);
+                m_color_map.set_palette_from_array(PlasmaColorMapLinearRGB, countof(PlasmaColorMapLinearRGB) / 3);
             else if (color_map == "viridis")
-                set_palette_from_array(ViridisColorMap, countof(ViridisColorMap) / 3);
+                m_color_map.set_palette_from_array(ViridisColorMapLinearRGB, countof(ViridisColorMapLinearRGB) / 3);
+            else if (color_map == "turbo")
+                m_color_map.set_palette_from_array(TurboColorMapLinearRGB, countof(TurboColorMapLinearRGB) / 3);
             else
             {
                 assert(color_map == "custom");
 
-                const string color_map_filepath =
-                    m_params.get_optional<string>("color_map_file_path", "", context);
+                const std::string color_map_filepath =
+                    m_params.get_optional<std::string>("color_map_file_path", "", context);
 
                 if (color_map_filepath.empty())
                 {
@@ -166,7 +170,7 @@ namespace
                         to_string(
                             project.search_paths().qualify(color_map_filepath)));
                 }
-                catch (const exception& e)
+                catch (const std::exception& e)
                 {
                     RENDERER_LOG_ERROR("%s%s", context.get(), e.what());
                     return false;
@@ -195,17 +199,17 @@ namespace
             return true;
         }
 
-        void execute(Frame& frame) const override
+        void execute(Frame& frame, const size_t thread_count) const override
         {
             float min_luminance, max_luminance;
 
             if (m_auto_range)
             {
-                Color4f min_color, max_color;
-                find_min_max(frame, min_color, max_color);
-
-                min_luminance = luminance(min_color.rgb());
-                max_luminance = luminance(max_color.rgb());
+                m_color_map.find_min_max_relative_luminance(
+                    frame.image(),
+                    frame.get_crop_window(),
+                    min_luminance,
+                    max_luminance);
             }
             else
             {
@@ -226,7 +230,11 @@ namespace
             if (m_render_isolines)
                 collect_isoline_segments(isoline_segments, frame, min_luminance, max_luminance);
 
-            remap_colors(frame, min_luminance, max_luminance);
+            m_color_map.remap_relative_luminance(
+                frame.image(),
+                frame.get_crop_window(),
+                min_luminance,
+                max_luminance);
 
             if (m_render_isolines)
                 render_isoline_segments(frame, isoline_segments);
@@ -260,9 +268,9 @@ namespace
             }
         };
 
-        typedef vector<Segment> SegmentVector;
+        typedef std::vector<Segment> SegmentVector;
 
-        vector<Color3f>     m_palette;
+        ColorMap            m_color_map;
         bool                m_auto_range;
         float               m_range_min;
         float               m_range_max;
@@ -271,73 +279,15 @@ namespace
         bool                m_render_isolines;
         float               m_line_thickness;
 
-        //
-        // Color mapping.
-        //
-
-        void set_palette_from_array(const float* values, const size_t entry_count)
-        {
-            m_palette.resize(entry_count);
-
-            for (size_t i = 0; i < entry_count; ++i)
-            {
-                m_palette[i] =
-                    Color3f(
-                        values[i * 3 + 0],
-                        values[i * 3 + 1],
-                        values[i * 3 + 2]);
-            }
-        }
-
-        void set_palette_from_image_file(const string& filepath)
+        void set_palette_from_image_file(const std::string& file_path)
         {
             GenericImageFileReader reader;
-            unique_ptr<Image> image(reader.read(filepath.c_str()));
+            std::unique_ptr<Image> image(reader.read(file_path.c_str()));
 
-            const size_t image_width = image->properties().m_canvas_width;
-            m_palette.resize(image_width);
+            if (!is_linear_image_file_format(file_path))
+                convert_srgb_to_linear_rgb(*image);
 
-            for (size_t i = 0; i < image_width; ++i)
-                image->get_pixel(i, 0, m_palette[i]);
-        }
-
-        Color3f evaluate_palette(float x) const
-        {
-            assert(m_palette.size() > 1);
-
-            x *= m_palette.size() - 1;
-
-            const size_t ix = min(truncate<size_t>(x), m_palette.size() - 2);
-            const float w = x - ix;
-
-            return lerp(m_palette[ix], m_palette[ix + 1], w);
-        }
-
-        void remap_colors(Frame& frame, const float min_luminance, const float max_luminance) const
-        {
-            if (min_luminance == max_luminance)
-            {
-                for_each_pixel(frame, [this](Color4f& color)
-                {
-                    color.rgb() = evaluate_palette(0.0f);
-                });
-            }
-            else
-            {
-                for_each_pixel(frame, [this, min_luminance, max_luminance](Color4f& color)
-                {
-                    const float col_luminance = luminance(color.rgb());
-
-                    const float x =
-                        saturate(
-                            inverse_lerp(
-                                min_luminance,
-                                max_luminance,
-                                col_luminance));
-
-                    color.rgb() = evaluate_palette(x);
-                });
-            }
+            m_color_map.set_palette_from_image_file(*image.get());
         }
 
         void add_legend_bar(Frame& frame, const float min_luminance, const float max_luminance) const
@@ -381,19 +331,15 @@ namespace
             // Draw legend bar.
             for (size_t y = y0; y < y1; ++y)
             {
-                for (size_t x = x0; x < x1; ++x)
-                {
-                    const float val =
-                        y0 == y1 - 1
-                            ? 0.0f
-                            : fit<size_t, float>(y, y0, y1 - 1, 1.0f, 0.0f);
+                const float val =
+                    y0 == y1 - 1
+                        ? 0.0f
+                        : fit<size_t, float>(y, y0, y1 - 1, 1.0f, 0.0f);
 
-                    image.set_pixel(
-                        x, y,
-                        Color4f(
-                            evaluate_palette(val),
-                            1.0f));
-                }
+                const Color4f color(m_color_map.evaluate_palette(val), 1.0f);
+
+                for (size_t x = x0; x < x1; ++x)
+                    image.set_pixel(x, y, color);
             }
 
             // Handle more edge cases.
@@ -412,7 +358,7 @@ namespace
 
                 const float lum =
                     fit<size_t, float>(i, 0, m_legend_bar_ticks - 1, max_luminance, min_luminance);
-                const string label = to_string(lum);
+                const std::string label = to_string(lum);
 
                 const float label_width =
                     TextRenderer::compute_string_width(LabelFont, LabelFontHeight, label.c_str());
@@ -750,19 +696,22 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
                     .insert("Magma", "magma")
                     .insert("Plasma", "plasma")
                     .insert("Viridis", "viridis")
+                    .insert("Turbo", "turbo")
                     .insert("Custom", "custom"))
             .insert("use", "required")
+            .insert("help", "Applied color map")
             .insert("default", "inferno")
             .insert("on_change", "rebuild_form"));
 
     metadata.push_back(
         Dictionary()
             .insert("name", "color_map_file_path")
-            .insert("label", "Colormap File Path")
+            .insert("label", "Color Map File Path")
             .insert("type", "file")
             .insert("file_picker_mode", "open")
             .insert("file_picker_type", "image")
             .insert("use", "optional")
+            .insert("help", "Path to a custom color map image")
             .insert("visible_if",
                 Dictionary()
                     .insert("color_map", "custom")));
@@ -773,6 +722,7 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
             .insert("label", "Auto Range")
             .insert("type", "boolean")
             .insert("use", "optional")
+            .insert("help", "Maps the full range of luminance values to the color map")
             .insert("default", "true")
             .insert("on_change", "rebuild_form"));
 
@@ -790,6 +740,7 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
                     .insert("value", "1.0")
                     .insert("type", "soft"))
             .insert("use", "optional")
+            .insert("help", "Luminance value mapped to the first row in the colormap")
             .insert("default", "0.0")
             .insert("visible_if",
                 Dictionary()
@@ -809,6 +760,7 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
                     .insert("value", "1.0")
                     .insert("type", "soft"))
             .insert("use", "optional")
+            .insert("help", "Luminance value mapped to the last row in the colormap")
             .insert("default", "1.0")
             .insert("visible_if",
                 Dictionary()
@@ -820,6 +772,7 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
             .insert("label", "Add Legend Bar")
             .insert("type", "boolean")
             .insert("use", "optional")
+            .insert("help", "Include a legend bar next to the color map")
             .insert("default", "true"));
 
     metadata.push_back(
@@ -836,6 +789,7 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
                     .insert("value", "64")
                     .insert("type", "soft"))
             .insert("use", "optional")
+            .insert("help", "Set the number of divisions in the legend bar")
             .insert("default", "8")
             .insert("visible_if",
                 Dictionary()
@@ -847,6 +801,7 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
             .insert("label", "Render Isolines")
             .insert("type", "boolean")
             .insert("use", "optional")
+            .insert("help", "Draw lines of equal relative luminance")
             .insert("default", "false")
             .insert("on_change", "rebuild_form"));
 
@@ -864,6 +819,7 @@ DictionaryArray ColorMapPostProcessingStageFactory::get_input_metadata() const
                     .insert("value", "5.0")
                     .insert("type", "soft"))
             .insert("use", "optional")
+            .insert("help", "Set the thickness of luminance isolines")
             .insert("default", "1.0")
             .insert("visible_if",
                 Dictionary()

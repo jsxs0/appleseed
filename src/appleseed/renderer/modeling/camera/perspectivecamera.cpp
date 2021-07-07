@@ -36,6 +36,8 @@
 #include "renderer/utility/paramarray.h"
 
 // appleseed.foundation headers.
+#include "foundation/image/canvasproperties.h"
+#include "foundation/image/image.h"
 #include "foundation/math/intersection/planesegment.h"
 #include "foundation/math/scalar.h"
 #include "foundation/utility/api/apistring.h"
@@ -52,6 +54,21 @@ namespace renderer
 PerspectiveCamera::PerspectiveCamera(const char* name, const ParamArray& params)
   : Camera(name, params)
 {
+}
+
+const foundation::Vector2d& PerspectiveCamera::get_film_dimensions() const
+{
+    return m_film_dimensions;
+}
+
+double PerspectiveCamera::get_focal_length() const
+{
+    return m_focal_length;
+}
+
+const foundation::Vector2d& PerspectiveCamera::get_shift() const
+{
+    return m_shift;
 }
 
 bool PerspectiveCamera::on_render_begin(
@@ -179,12 +196,12 @@ double PerspectiveCamera::extract_focal_length(const double film_width) const
 
 double PerspectiveCamera::hfov_to_focal_length(const double film_width, const double hfov)
 {
-    return 0.5 * film_width / tan(0.5 * hfov);
+    return 0.5 * film_width / std::tan(0.5 * hfov);
 }
 
 double PerspectiveCamera::focal_length_to_hfov(const double film_width, const double focal_length)
 {
-    return 2.0 * atan(film_width / (2.0 * focal_length));
+    return 2.0 * std::atan(film_width / (2.0 * focal_length));
 }
 
 Vector3d PerspectiveCamera::ndc_to_camera(const Vector2d& point) const

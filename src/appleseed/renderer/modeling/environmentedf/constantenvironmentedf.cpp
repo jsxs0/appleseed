@@ -37,12 +37,12 @@
 #include "renderer/modeling/input/source.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/math/sampling/mappings.h"
 #include "foundation/math/scalar.h"
 #include "foundation/math/vector.h"
 #include "foundation/platform/compiler.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Standard headers.
 #include <cassert>
@@ -52,7 +52,6 @@ namespace foundation    { class IAbortSwitch; }
 namespace renderer      { class Project; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -74,7 +73,7 @@ namespace
             const ParamArray&       params)
           : EnvironmentEDF(name, params)
         {
-            m_inputs.declare("radiance", InputFormatSpectralIlluminance);
+            m_inputs.declare("radiance", InputFormat::SpectralIlluminance);
         }
 
         void release() override
@@ -193,6 +192,8 @@ DictionaryArray ConstantEnvironmentEDFFactory::get_input_metadata() const
             .insert("use", "required")
             .insert("default", "1.0")
             .insert("help", "Environment radiance"));
+
+    add_common_input_metadata(metadata);
 
     return metadata;
 }

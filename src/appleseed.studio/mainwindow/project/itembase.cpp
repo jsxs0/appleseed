@@ -36,6 +36,7 @@
 #include <QString>
 #include <Qt>
 
+using namespace appleseed::qtcommon;
 using namespace foundation;
 
 namespace appleseed {
@@ -49,6 +50,7 @@ ItemBase::ItemBase(
   , m_allow_edition(true)
   , m_allow_deletion(true)
 {
+    setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
 }
 
 ItemBase::ItemBase(
@@ -60,6 +62,7 @@ ItemBase::ItemBase(
   , m_allow_edition(true)
   , m_allow_deletion(true)
 {
+    setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
     set_title(title);
 }
 

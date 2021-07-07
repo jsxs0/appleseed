@@ -30,7 +30,6 @@
 #pragma once
 
 // appleseed.foundation headers.
-#include "foundation/core/concepts/noncopyable.h"
 #include "foundation/math/knn/knn_node.h"
 #include "foundation/math/vector.h"
 #include "foundation/utility/test.h"
@@ -49,7 +48,6 @@ namespace knn {
 
 template <typename T, size_t N>
 class Tree
-  : public NonCopyable
 {
   public:
     typedef T ValueType;
@@ -71,6 +69,7 @@ class Tree
     size_t get_memory_size() const;
 
   private:
+    template <typename, size_t> friend class AnyQuery;
     template <typename, size_t> friend class Builder;
     template <typename, size_t> friend class Query;
     template <typename> friend class TreeStatistics;

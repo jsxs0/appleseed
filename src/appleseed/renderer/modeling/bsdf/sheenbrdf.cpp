@@ -35,16 +35,15 @@
 #include "renderer/modeling/bsdf/bsdf.h"
 #include "renderer/modeling/bsdf/bsdfsample.h"
 #include "renderer/modeling/bsdf/bsdfwrapper.h"
+#include "renderer/modeling/bsdf/microfacetbrdfwrapper.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/math/basis.h"
+#include "foundation/math/dual.h"
 #include "foundation/math/sampling/mappings.h"
 #include "foundation/math/vector.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
-
-// Standard headers.
-#include <cmath>
 
 // Forward declarations.
 namespace foundation    { class IAbortSwitch; }
@@ -52,7 +51,6 @@ namespace renderer      { class Assembly; }
 namespace renderer      { class Project; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -69,6 +67,7 @@ namespace
     //
 
     const char* Model = "sheen_brdf";
+    const char* MicrofacetModel = "microfacet_normal_mapping_sheen_brdf";
 
     class SheenBRDFImpl
       : public BSDF
@@ -79,8 +78,8 @@ namespace
             const ParamArray&           params)
           : BSDF(name, Reflective, ScatteringMode::Glossy, params)
         {
-            m_inputs.declare("reflectance", InputFormatSpectralReflectance);
-            m_inputs.declare("reflectance_multiplier", InputFormatFloat, "1.0");
+            m_inputs.declare("reflectance", InputFormat::SpectralReflectance);
+            m_inputs.declare("reflectance_multiplier", InputFormat::Float, "1.0");
         }
 
         void release() override
@@ -98,6 +97,8 @@ namespace
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
+            const LocalGeometry&        local_geometry,
+            const Dual3f&               outgoing,
             const int                   modes,
             BSDFSample&                 sample) const override
         {
@@ -111,10 +112,10 @@ namespace
             sampling_context.split_in_place(2, 1);
             const Vector2f s = sampling_context.next2<Vector2f>();
             const Vector3f wi = sample_hemisphere_uniform(s);
-            const Vector3f incoming = sample.m_shading_basis.transform_to_parent(wi);
+            const Vector3f incoming = local_geometry.m_shading_basis.transform_to_parent(wi);
             sample.m_incoming = Dual3f(incoming);
 
-            const Vector3f h = normalize(incoming + sample.m_outgoing.get_value());
+            const Vector3f h = normalize(incoming + outgoing.get_value());
             const float cos_ih = dot(incoming, h);
             const float fh = pow_int<5>(saturate(1.0f - cos_ih));
 
@@ -124,15 +125,14 @@ namespace
             sample.m_value.m_glossy *= fh * values->m_reflectance_multiplier;
             sample.m_value.m_beauty = sample.m_value.m_glossy;
 
-            sample.compute_reflected_differentials();
+            sample.compute_diffuse_differentials(outgoing);
         }
 
         float evaluate(
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes,
@@ -158,8 +158,7 @@ namespace
         float evaluate_pdf(
             const void*                 data,
             const bool                  adjoint,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes) const override
@@ -175,7 +174,20 @@ namespace
         typedef SheenBRDFInputValues InputValues;
     };
 
+    class MicrofacetSheenBRDFImpl
+      : public SheenBRDFImpl
+    {
+      public:
+        using SheenBRDFImpl::SheenBRDFImpl;
+
+        const char* get_model() const override
+        {
+            return MicrofacetModel;
+        }
+    };
+
     typedef BSDFWrapper<SheenBRDFImpl> SheenBRDF;
+    typedef MicrofacetBRDFWrapper<MicrofacetSheenBRDFImpl> MicrofacetSheenBRDF;
 }
 
 
@@ -235,6 +247,31 @@ auto_release_ptr<BSDF> SheenBRDFFactory::create(
     const ParamArray&   params) const
 {
     return auto_release_ptr<BSDF>(new SheenBRDF(name, params));
+}
+
+
+//
+// MicrofacetSheenBRDFFactory class implementation.
+//
+
+const char* MicrofacetSheenBRDFFactory::get_model() const
+{
+    return MicrofacetModel;
+}
+
+Dictionary MicrofacetSheenBRDFFactory::get_model_metadata() const
+{
+    return
+        Dictionary()
+            .insert("name", MicrofacetModel)
+            .insert("label", "Microfacet Sheen BRDF");
+}
+
+auto_release_ptr<BSDF> MicrofacetSheenBRDFFactory::create(
+    const char*         name,
+    const ParamArray&   params) const
+{
+    return auto_release_ptr<BSDF>(new MicrofacetSheenBRDF(name, params));
 }
 
 }   // namespace renderer

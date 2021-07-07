@@ -30,11 +30,11 @@
 #pragma once
 
 // appleseed.foundation headers.
+#include "foundation/hash/hash.h"
 #include "foundation/math/fp.h"
-#include "foundation/math/hash.h"
 #include "foundation/math/matrix.h"
 #include "foundation/math/scalar.h"
-#include "foundation/platform/types.h"
+#include "foundation/platform/compiler.h"
 #include "foundation/utility/poison.h"
 
 // Imath headers.
@@ -49,6 +49,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 
 namespace foundation
 {
@@ -138,16 +139,16 @@ template <typename T, size_t N> Color<T, N> rcp(const Color<T, N>& c);
 template <typename T, size_t N> bool is_saturated(const Color<T, N>& c);
 
 // Clamp the argument to [0,1].
-template <typename T, size_t N> Color<T, N> saturate(const Color<T, N>& c);
+template <typename T, size_t N> APPLESEED_NODISCARD Color<T, N> saturate(const Color<T, N>& c);
 
 // Clamp the argument to [min, max].
-template <typename T, size_t N> Color<T, N> clamp(const Color<T, N>& c, const T min, const T max);
+template <typename T, size_t N> APPLESEED_NODISCARD Color<T, N> clamp(const Color<T, N>& c, const T min, const T max);
 
 // Clamp the argument to [min, +infinity).
-template <typename T, size_t N> Color<T, N> clamp_low(const Color<T, N>& c, const T min);
+template <typename T, size_t N> APPLESEED_NODISCARD Color<T, N> clamp_low(const Color<T, N>& c, const T min);
 
 // Clamp the argument to (-infinity, max].
-template <typename T, size_t N> Color<T, N> clamp_high(const Color<T, N>& c, const T max);
+template <typename T, size_t N> APPLESEED_NODISCARD Color<T, N> clamp_high(const Color<T, N>& c, const T max);
 
 // Return the smallest or largest signed component of a color.
 template <typename T, size_t N> T min_value(const Color<T, N>& c);
@@ -176,6 +177,9 @@ template <typename T, size_t N> bool has_nan(const Color<T, N>& c);
 
 // Return true if all components of a color are finite (not NaN, not infinite).
 template <typename T, size_t N> bool is_finite(const Color<T, N>& c);
+
+// Return true if all components of a color are finite (not NaN, not infinite) and non-negative.
+template <typename T, size_t N> bool is_finite_non_neg(const Color<T, N>& c);
 
 
 //
@@ -326,13 +330,13 @@ class Color<T, 4>
 // Full specializations for colors of type int, float and double.
 //
 
-typedef Color<uint8,    3> Color3b;
-typedef Color<float,    3> Color3f;
-typedef Color<double,   3> Color3d;
+typedef Color<std::uint8_t, 3> Color3b;
+typedef Color<float,        3> Color3f;
+typedef Color<double,       3> Color3d;
 
-typedef Color<uint8,    4> Color4b;
-typedef Color<float,    4> Color4f;
-typedef Color<double,   4> Color4d;
+typedef Color<std::uint8_t, 4> Color4b;
+typedef Color<float,        4> Color4f;
+typedef Color<double,       4> Color4d;
 
 
 //
@@ -342,6 +346,12 @@ typedef Color<double,   4> Color4d;
 // Compute a color from a given integer.
 template <typename T, typename Int>
 Color<T, 3> integer_to_color3(const Int i);
+
+// Compute the square L2 distance between two linear RGB colors.
+template <typename T>
+T square_distance(
+    const Color<T, 3>& c1,
+    const Color<T, 3>& c2);
 
 
 //
@@ -400,7 +410,7 @@ template <typename T, size_t N>
 void PoisonImpl<Color<T, N>>::do_poison(Color<T, N>& c)
 {
     for (size_t i = 0; i < N; ++i)
-        poison(c[i]);
+        always_poison(c[i]);
 }
 
 template <typename T, size_t N>
@@ -892,6 +902,18 @@ inline bool is_finite(const Color<T, N>& c)
     return true;
 }
 
+template <typename T, size_t N>
+inline bool is_finite_non_neg(const Color<T, N>& c)
+{
+    for (size_t i = 0; i < N; ++i)
+    {
+        if (!FP<T>::is_finite_non_neg(c[i]))
+            return false;
+    }
+
+    return true;
+}
+
 
 //
 // RGB color implementation.
@@ -1171,16 +1193,27 @@ inline Color<T, 4> Color<T, 4>::unpremultiplied() const
 template <typename T, typename Int>
 Color<T, 3> integer_to_color3(const Int i)
 {
-    const uint32 u = static_cast<uint32>(i);    // keep the low 32 bits
+    const std::uint32_t u = static_cast<std::uint32_t>(i);    // keep the low 32 bits
 
-    const uint32 x = hash_uint32(u);
-    const uint32 y = hash_uint32(u + 1);
-    const uint32 z = hash_uint32(u + 2);
+    const std::uint32_t x = hash_uint32(u);
+    const std::uint32_t y = hash_uint32(u + 1);
+    const std::uint32_t z = hash_uint32(u + 2);
 
     return Color<T, 3>(
         static_cast<T>(x) * (1.0f / 4294967295.0f),
         static_cast<T>(y) * (1.0f / 4294967295.0f),
         static_cast<T>(z) * (1.0f / 4294967295.0f));
+}
+
+template <typename T>
+inline T square_distance(
+    const Color<T, 3>& c1,
+    const Color<T, 3>& c2)
+{
+    return
+        square(c1.r - c2.r) +
+        square(c1.g - c2.g) +
+        square(c1.b - c2.b);
 }
 
 }   // namespace foundation

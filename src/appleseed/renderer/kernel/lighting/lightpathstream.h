@@ -34,15 +34,15 @@
 // appleseed.foundation headers.
 #include "foundation/image/color.h"
 #include "foundation/math/vector.h"
-#include "foundation/platform/types.h"
 
 // Standard headers.
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 // Forward declarations.
 namespace renderer  { class Camera; }
-namespace renderer  { class EmittingTriangle; }
+namespace renderer  { class EmittingShape; }
 namespace renderer  { class Entity; }
 namespace renderer  { class EnvironmentEDF; }
 namespace renderer  { class Light; }
@@ -76,8 +76,8 @@ class LightPathStream
         const PathVertex&               vertex,
         const Spectrum&                 emitted_radiance);
 
-    void sampled_emitting_triangle(
-        const EmittingTriangle&         triangle,
+    void sampled_emitting_shape(
+        const EmittingShape&            shape,
         const foundation::Vector3d&     emission_position,
         const Spectrum&                 material_value,
         const Spectrum&                 emitted_radiance);
@@ -99,7 +99,7 @@ class LightPathStream
   private:
     friend class LightPathRecorder;
 
-    enum class EventType : foundation::uint8
+    enum class EventType : std::uint8_t
     {
         HitReflector,
         HitEmitter,
@@ -110,14 +110,14 @@ class LightPathStream
     struct Event
     {
         EventType                   m_type;
-        foundation::uint8           m_data_index;               // index of this event's data in one of the data array
+        std::uint8_t                m_data_index;               // index of this event's data in one of the data array
     };
 
     struct HitReflectorData
     {
         const ObjectInstance*       m_object_instance;          // object instance that was hit
         foundation::Vector3f        m_vertex_position;          // world space position of the hit point on the reflector
-        foundation::Color3f         m_path_throughput;          // cumulative path throughput up to but excluding this vertex
+        foundation::Color3f         m_path_throughput;          // cumulative path throughput up to but excluding this vertex, in reverse order (i.e. in the order from camera to light source)
     };
 
     struct HitEmitterData
@@ -142,14 +142,14 @@ class LightPathStream
         foundation::Color3f         m_emitted_radiance;         // emitted radiance in W.sr^-1.m^-2
     };
 
-    typedef foundation::Vector<foundation::uint16, 2> Vector2u16;
+    typedef foundation::Vector<std::uint16_t, 2> Vector2u16;
 
     struct StoredPath
     {
         Vector2u16                  m_pixel_coords;
         foundation::Vector2f        m_sample_position;
-        foundation::uint32          m_vertex_begin_index;       // index of the first vertex in m_vertices
-        foundation::uint32          m_vertex_end_index;         // index of one vertex past the last one in m_vertices
+        std::uint32_t               m_vertex_begin_index;       // index of the first vertex in m_vertices
+        std::uint32_t               m_vertex_end_index;         // index of one vertex past the last one in m_vertices
     };
 
     struct StoredPathVertex

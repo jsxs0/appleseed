@@ -33,12 +33,11 @@
 #include "renderer/modeling/bssrdf/dipolebssrdffactory.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/math/sampling/mappings.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -53,16 +52,16 @@ DipoleBSSRDF::DipoleBSSRDF(
   : SeparableBSSRDF(name, params)
   , m_has_sigma_sources(false)
 {
-    m_inputs.declare("weight", InputFormatFloat, "1.0");
-    m_inputs.declare("reflectance", InputFormatSpectralReflectance);
-    m_inputs.declare("reflectance_multiplier", InputFormatFloat, "1.0");
-    m_inputs.declare("mfp", InputFormatSpectralReflectance);
-    m_inputs.declare("mfp_multiplier", InputFormatFloat, "1.0");
-    m_inputs.declare("sigma_a", InputFormatSpectralReflectance, "");
-    m_inputs.declare("sigma_s", InputFormatSpectralReflectance, "");
-    m_inputs.declare("g", InputFormatFloat, "0.0");
-    m_inputs.declare("ior", InputFormatFloat);
-    m_inputs.declare("fresnel_weight", InputFormatFloat, "1.0");
+    m_inputs.declare("weight", InputFormat::Float, "1.0");
+    m_inputs.declare("reflectance", InputFormat::SpectralReflectance);
+    m_inputs.declare("reflectance_multiplier", InputFormat::Float, "1.0");
+    m_inputs.declare("mfp", InputFormat::SpectralReflectance);
+    m_inputs.declare("mfp_multiplier", InputFormat::Float, "1.0");
+    m_inputs.declare("sigma_a", InputFormat::SpectralReflectance, "");
+    m_inputs.declare("sigma_s", InputFormat::SpectralReflectance, "");
+    m_inputs.declare("g", InputFormat::Float, "0.0");
+    m_inputs.declare("ior", InputFormat::Float);
+    m_inputs.declare("fresnel_weight", InputFormat::Float, "1.0");
 }
 
 size_t DipoleBSSRDF::compute_input_data_size() const
@@ -115,21 +114,24 @@ bool DipoleBSSRDF::sample(
     const void*             data,
     const ShadingPoint&     outgoing_point,
     const Vector3f&         outgoing_dir,
+    const int               modes,
     BSSRDFSample&           bssrdf_sample,
     BSDFSample&             bsdf_sample) const
 {
     const DipoleBSSRDFInputValues* values =
         static_cast<const DipoleBSSRDFInputValues*>(data);
 
-    return do_sample(
-        shading_context,
-        sampling_context,
-        data,
-        values->m_base_values,
-        outgoing_point,
-        outgoing_dir,
-        bssrdf_sample,
-        bsdf_sample);
+    return
+        do_sample(
+            shading_context,
+            sampling_context,
+            data,
+            values->m_base_values,
+            outgoing_point,
+            outgoing_dir,
+            modes,
+            bssrdf_sample,
+            bsdf_sample);
 }
 
 void DipoleBSSRDF::evaluate(
@@ -144,15 +146,16 @@ void DipoleBSSRDF::evaluate(
     const DipoleBSSRDFInputValues* values =
         static_cast<const DipoleBSSRDFInputValues*>(data);
 
-    return do_evaluate(
-        data,
-        values->m_base_values,
-        outgoing_point,
-        outgoing_dir,
-        incoming_point,
-        incoming_dir,
-        modes,
-        value);
+    return
+        do_evaluate(
+            data,
+            values->m_base_values,
+            outgoing_point,
+            outgoing_dir,
+            incoming_point,
+            incoming_dir,
+            modes,
+            value);
 }
 
 

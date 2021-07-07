@@ -34,8 +34,8 @@
 #include "renderer/modeling/input/inputarray.h"
 
 // appleseed.foundation headers.
+#include "foundation/memory/autoreleaseptr.h"
 #include "foundation/platform/compiler.h"
-#include "foundation/utility/autoreleaseptr.h"
 
 // appleseed.main headers.
 #include "main/dllsymbol.h"
@@ -58,7 +58,6 @@ APPLESEED_DECLARE_INPUT_VALUES(GlossyBRDFInputValues)
     Spectrum    m_reflectance;
     float       m_reflectance_multiplier;
     float       m_roughness;
-    float       m_highlight_falloff;
     float       m_anisotropy;
     float       m_ior;
     float       m_fresnel_weight;
@@ -67,7 +66,7 @@ APPLESEED_DECLARE_INPUT_VALUES(GlossyBRDFInputValues)
     struct Precomputed
     {
         float   m_outside_ior;
-        float   m_fresnel_average;
+        float   m_F0;
     };
 
     Precomputed m_precomputed;
@@ -93,6 +92,27 @@ class APPLESEED_DLLSYMBOL GlossyBRDFFactory
 
     // Return metadata for the inputs of this BSDF model.
     foundation::DictionaryArray get_input_metadata() const override;
+
+    // Create a new BSDF instance.
+    foundation::auto_release_ptr<BSDF> create(
+        const char*         name,
+        const ParamArray&   params) const override;
+};
+
+
+//
+// Microfacet Glossy BRDF factory.
+//
+
+class APPLESEED_DLLSYMBOL MicrofacetGlossyBRDFFactory
+  : public GlossyBRDFFactory
+{
+  public:
+    // Return a string identifying this BSDF model.
+    const char* get_model() const override;
+
+    // Return metadata for this BSDF model.
+    foundation::Dictionary get_model_metadata() const override;
 
     // Create a new BSDF instance.
     foundation::auto_release_ptr<BSDF> create(

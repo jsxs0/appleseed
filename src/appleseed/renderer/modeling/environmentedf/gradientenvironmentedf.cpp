@@ -38,6 +38,7 @@
 #include "renderer/utility/transformsequence.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
 #include "foundation/math/matrix.h"
 #include "foundation/math/sampling/mappings.h"
 #include "foundation/math/scalar.h"
@@ -45,7 +46,6 @@
 #include "foundation/math/vector.h"
 #include "foundation/platform/compiler.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Standard headers.
 #include <cassert>
@@ -56,7 +56,6 @@ namespace foundation    { class IAbortSwitch; }
 namespace renderer      { class Project; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -78,8 +77,8 @@ namespace
             const ParamArray&       params)
           : EnvironmentEDF(name, params)
         {
-            m_inputs.declare("horizon_radiance", InputFormatSpectralIlluminance);
-            m_inputs.declare("zenith_radiance", InputFormatSpectralIlluminance);
+            m_inputs.declare("horizon_radiance", InputFormat::SpectralIlluminance);
+            m_inputs.declare("zenith_radiance", InputFormat::SpectralIlluminance);
         }
 
         void release() override
@@ -186,7 +185,7 @@ namespace
         void compute_gradient(const float y, Spectrum& output) const
         {
             // Compute the blending factor between the horizon and zenith colors.
-            const float angle = acos(abs(y));
+            const float angle = std::acos(std::abs(y));
             const float blend = angle * (1.0f / HalfPi<float>());
 
             // Blend the horizon and zenith radiances.
@@ -250,6 +249,8 @@ DictionaryArray GradientEnvironmentEDFFactory::get_input_metadata() const
             .insert("use", "required")
             .insert("default", "0.7")
             .insert("help", "Zenith radiance"));
+
+    add_common_input_metadata(metadata);
 
     return metadata;
 }

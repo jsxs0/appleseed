@@ -32,7 +32,7 @@
 #include "renderer/modeling/camera/icamerafactory.h"
 
 // appleseed.foundation headers.
-#include "foundation/utility/autoreleaseptr.h"
+#include "foundation/memory/autoreleaseptr.h"
 
 // appleseed.main headers.
 #include "main/dllsymbol.h"
@@ -72,4 +72,4 @@ class APPLESEED_DLLSYMBOL FisheyeLensCameraFactory
         const ParamArray&   params) const override;
 };
 
-}       // namespace renderer
+}   // namespace renderer

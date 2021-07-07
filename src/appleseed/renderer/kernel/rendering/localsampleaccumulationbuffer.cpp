@@ -37,15 +37,16 @@
 #include "renderer/modeling/frame/frame.h"
 
 // appleseed.foundation headers.
+#include "foundation/image/accumulatortile.h"
 #include "foundation/image/canvasproperties.h"
 #include "foundation/image/color.h"
-#include "foundation/image/filteredtile.h"
 #include "foundation/image/image.h"
 #include "foundation/image/pixel.h"
 #include "foundation/image/tile.h"
 #include "foundation/math/scalar.h"
 #include "foundation/platform/atomic.h"
 #include "foundation/platform/timers.h"
+#include "foundation/platform/types.h"
 #include "foundation/utility/job/iabortswitch.h"
 #include "foundation/utility/stopwatch.h"
 
@@ -55,7 +56,6 @@
 
 using namespace boost;
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -78,12 +78,11 @@ namespace renderer
 //   samples, it becomes the new active level.
 //
 
-//#define PRINT_DETAILED_PERF_REPORTS
+// #define PRINT_DETAILED_PERF_REPORTS
 
 LocalSampleAccumulationBuffer::LocalSampleAccumulationBuffer(
     const size_t        width,
-    const size_t        height,
-    const Filter2f&     filter)
+    const size_t        height)
 {
     const size_t MinSize = 32;
 
@@ -92,16 +91,21 @@ LocalSampleAccumulationBuffer::LocalSampleAccumulationBuffer(
 
     while (true)
     {
-        m_levels.push_back(new FilteredTile(level_width, level_height, 4, filter));
+        m_levels.push_back(new AccumulatorTile(level_width, level_height, 4));
+        m_read_levels.push_back(new AccumulatorTile(level_width, level_height, 4));
+        m_level_scales.push_back(
+            Vector2f(
+                static_cast<float>(level_width) / width,
+                static_cast<float>(level_height) / height));
 
         if (level_width <= MinSize && level_height <= MinSize)
             break;
 
-        level_width = max(level_width / 2, MinSize);
-        level_height = max(level_height / 2, MinSize);
+        level_width = std::max(level_width / 2, MinSize);
+        level_height = std::max(level_height / 2, MinSize);
     }
 
-    m_remaining_pixels = new boost::atomic<int32>[m_levels.size()];
+    m_remaining_pixels = new boost::atomic<std::int32_t>[m_levels.size()];
 
     clear();
 }
@@ -111,7 +115,10 @@ LocalSampleAccumulationBuffer::~LocalSampleAccumulationBuffer()
     delete[] m_remaining_pixels;
 
     for (size_t i = 0, e = m_levels.size(); i < e; ++i)
+    {
         delete m_levels[i];
+        delete m_read_levels[i];
+    }
 }
 
 void LocalSampleAccumulationBuffer::clear()
@@ -136,16 +143,16 @@ void LocalSampleAccumulationBuffer::clear()
         m_levels[i]->clear();
 
         m_remaining_pixels[i] =
-            static_cast<int32>(m_levels[i]->get_pixel_count());
+            static_cast<std::int32_t>(m_levels[i]->get_pixel_count());
     }
 
-    m_active_level = static_cast<uint32>(m_levels.size() - 1);
+    m_active_level = static_cast<std::uint32_t>(m_levels.size() - 1);
 }
 
 void LocalSampleAccumulationBuffer::store_samples(
-    const size_t        sample_count,
-    const Sample        samples[],
-    IAbortSwitch&       abort_switch)
+    const size_t            sample_count,
+    const Sample            samples[],
+    IAbortSwitch&           abort_switch)
 {
 #ifdef PRINT_DETAILED_PERF_REPORTS
     Stopwatch<DefaultWallclockTimer> sw(0);
@@ -168,11 +175,10 @@ void LocalSampleAccumulationBuffer::store_samples(
 
         // Store samples at every level, starting with the highest resolution level up to the active level.
         size_t counter = 0;
-        for (uint32 i = 0, e = m_active_level; i <= e; ++i)
+        for (std::uint32_t i = 0, e = m_active_level; i <= e; ++i)
         {
-            FilteredTile* level = m_levels[i];
-            const float level_width = static_cast<float>(level->get_width());
-            const float level_height = static_cast<float>(level->get_height());
+            AccumulatorTile* level = m_levels[i];
+            const Vector2f& level_scale = m_level_scales[i];
 
             const Sample* sample_end = samples + sample_count;
             for (const Sample* s = samples; s < sample_end; ++s)
@@ -183,9 +189,11 @@ void LocalSampleAccumulationBuffer::store_samples(
                     return;
                 }
 
-                const float fx = s->m_position.x * level_width;
-                const float fy = s->m_position.y * level_height;
-                level->atomic_add(fx, fy, &s->m_color[0]);
+                level->atomic_add(
+                    Vector2u(
+                        static_cast<size_t>(s->m_pixel_coords.x * level_scale.x),
+                        static_cast<size_t>(s->m_pixel_coords.y * level_scale.y)),
+                    &s->m_color[0]);
             }
         }
 
@@ -203,14 +211,14 @@ void LocalSampleAccumulationBuffer::store_samples(
     if (m_active_level > 0)
     {
         // Update pixel counters for all levels up to the active level.
-        const int32 n = static_cast<int32>(sample_count);
-        for (uint32 i = 0, e = m_active_level; i <= e; ++i)
+        const std::int32_t n = static_cast<std::int32_t>(sample_count);
+        for (std::uint32_t i = 0, e = m_active_level; i <= e; ++i)
             m_remaining_pixels[i].fetch_sub(n);
 
         // Find the new active level.
-        uint32 cur_active_level = m_active_level;
-        uint32 new_active_level = cur_active_level;
-        for (uint32 i = 0, e = cur_active_level; i < e; ++i)
+        std::uint32_t cur_active_level = m_active_level;
+        std::uint32_t new_active_level = cur_active_level;
+        for (std::uint32_t i = 0, e = cur_active_level; i < e; ++i)
         {
             if (m_remaining_pixels[i] <= 0)
             {
@@ -226,8 +234,8 @@ void LocalSampleAccumulationBuffer::store_samples(
 }
 
 void LocalSampleAccumulationBuffer::develop_to_frame(
-    Frame&              frame,
-    IAbortSwitch&       abort_switch)
+    Frame&                  frame,
+    IAbortSwitch&           abort_switch)
 {
 #ifdef PRINT_DETAILED_PERF_REPORTS
     Stopwatch<DefaultWallclockTimer> sw(0);
@@ -248,6 +256,14 @@ void LocalSampleAccumulationBuffer::develop_to_frame(
     RENDERER_LOG_DEBUG("develop_to_frame: acquiring lock: %f", t1 * 1000.0);
 #endif
 
+    // Copy tile first so the critical section can end before doing the expensive develop_to_tile.
+    const std::uint32_t active_level = m_active_level; // Ensure the same active_level is used for both arrays.
+    const AccumulatorTile& level = *m_levels[active_level];
+    AccumulatorTile& read_level = *m_read_levels[active_level];    
+    read_level.copy_from(level);
+
+    m_lock.unlock_write();
+
     Image& color_image = frame.image();
 
     const CanvasProperties& frame_props = color_image.properties();
@@ -257,17 +273,12 @@ void LocalSampleAccumulationBuffer::develop_to_frame(
 
     const AABB2u& crop_window = frame.get_crop_window();
 
-    const FilteredTile& level = *m_levels[m_active_level];
-
     for (size_t ty = 0; ty < frame_props.m_tile_count_y; ++ty)
     {
         for (size_t tx = 0; tx < frame_props.m_tile_count_x; ++tx)
         {
             if (abort_switch.is_aborted())
-            {
-                m_lock.unlock_write();
                 return;
-            }
 
             const size_t origin_x = tx * frame_props.m_tile_width;
             const size_t origin_y = ty * frame_props.m_tile_height;
@@ -283,14 +294,12 @@ void LocalSampleAccumulationBuffer::develop_to_frame(
                 color_tile,
                 frame_props.m_canvas_width,
                 frame_props.m_canvas_height,
-                level,
+                read_level,
                 origin_x,
                 origin_y,
                 rect);
         }
     }
-
-    m_lock.unlock_write();
 
 #ifdef PRINT_DETAILED_PERF_REPORTS
     sw.measure();
@@ -300,13 +309,13 @@ void LocalSampleAccumulationBuffer::develop_to_frame(
 }
 
 void LocalSampleAccumulationBuffer::develop_to_tile(
-    Tile&               color_tile,
-    const size_t        image_width,
-    const size_t        image_height,
-    const FilteredTile& level,
-    const size_t        origin_x,
-    const size_t        origin_y,
-    const AABB2u&       rect)
+    Tile&                   color_tile,
+    const size_t            image_width,
+    const size_t            image_height,
+    const AccumulatorTile&  level,
+    const size_t            origin_x,
+    const size_t            origin_y,
+    const AABB2u&           rect)
 {
     assert(level.get_channel_count() == 4);
 
@@ -319,8 +328,8 @@ void LocalSampleAccumulationBuffer::develop_to_tile(
     if (image_width % level_width == 0 && is_pow2(m))
     {
         const size_t s = log2_int(m);
-        const size_t prefix_end = min(next_multiple(rect.min.x, m), rect.max.x + 1);
-        const size_t suffix_begin = max(prev_multiple(rect.max.x + 1, m), prefix_end);
+        const size_t prefix_end = std::min(next_multiple(rect.min.x, m), rect.max.x + 1);
+        const size_t suffix_begin = std::max(prev_multiple(rect.max.x + 1, m), prefix_end);
 
         for (size_t iy = rect.min.y; iy <= rect.max.y; ++iy)
         {

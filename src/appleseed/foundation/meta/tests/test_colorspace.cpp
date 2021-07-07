@@ -42,7 +42,6 @@
 #include <vector>
 
 using namespace foundation;
-using namespace std;
 
 TEST_SUITE(Foundation_Image_ColorSpace)
 {
@@ -479,11 +478,11 @@ TEST_SUITE(Foundation_Image_ColorSpace)
         return RegularSpectrum31f::from_array(Values);
     }
 
-    TEST_CASE(TestSpectrumToCIEXYZConversion)
+    TEST_CASE(TestSpectralReflectanceToCIEXYZConversion)
     {
         const RegularSpectrum31f spectrum = get_white_spectrum();
         const LightingConditions lighting_conditions(IlluminantCIED65, XYZCMFCIE19312Deg);
-        const Color3f ciexyz = spectrum_to_ciexyz<float>(lighting_conditions, spectrum);
+        const Color3f ciexyz = spectral_reflectance_to_ciexyz<float>(lighting_conditions, spectrum);
 
         EXPECT_FEQ_EPS(
             Color3f(0.701480f, 0.73824f, 0.804104f),
@@ -550,9 +549,9 @@ TEST_SUITE(Foundation_Image_ColorSpace)
             1.0e-6f);
     }
 
-    vector<Vector2d> zip(const double x[], const double y[], const size_t count)
+    std::vector<Vector2d> zip(const double x[], const double y[], const size_t count)
     {
-        vector<Vector2d> points(count);
+        std::vector<Vector2d> points(count);
 
         for (size_t i = 0; i < count; ++i)
         {

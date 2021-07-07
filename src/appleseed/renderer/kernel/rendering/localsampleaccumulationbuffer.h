@@ -36,16 +36,15 @@
 #include "foundation/math/aabb.h"
 #include "foundation/math/filter.h"
 #include "foundation/platform/atomic.h"
-#include "foundation/platform/compiler.h"
 #include "foundation/platform/thread.h"
-#include "foundation/platform/types.h"
 
 // Standard headers.
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 // Forward declarations.
-namespace foundation    { class FilteredTile; }
+namespace foundation    { class AccumulatorTile; }
 namespace foundation    { class IAbortSwitch; }
 namespace foundation    { class Tile; }
 namespace renderer      { class Frame; }
@@ -60,9 +59,8 @@ class LocalSampleAccumulationBuffer
   public:
     // Constructor.
     LocalSampleAccumulationBuffer(
-        const size_t                        width,
-        const size_t                        height,
-        const foundation::Filter2f&         filter);
+        const size_t                            width,
+        const size_t                            height);
 
     // Destructor.
     ~LocalSampleAccumulationBuffer() override;
@@ -72,34 +70,36 @@ class LocalSampleAccumulationBuffer
 
     // Store a set of samples into the buffer. Thread-safe.
     void store_samples(
-        const size_t                        sample_count,
-        const Sample                        samples[],
-        foundation::IAbortSwitch&           abort_switch) override;
+        const size_t                            sample_count,
+        const Sample                            samples[],
+        foundation::IAbortSwitch&               abort_switch) override;
 
     // Develop the buffer to a frame. Thread-safe.
     void develop_to_frame(
-        Frame&                              frame,
-        foundation::IAbortSwitch&           abort_switch) override;
+        Frame&                                  frame,
+        foundation::IAbortSwitch&               abort_switch) override;
 
     // Exposed for tests and benchmarks.
     static void develop_to_tile(
-        foundation::Tile&                   color_tile,
-        const size_t                        image_width,
-        const size_t                        image_height,
-        const foundation::FilteredTile&     level,
-        const size_t                        origin_x,
-        const size_t                        origin_y,
-        const foundation::AABB2u&           rect);
+        foundation::Tile&                       color_tile,
+        const size_t                            image_width,
+        const size_t                            image_height,
+        const foundation::AccumulatorTile&      level,
+        const size_t                            origin_x,
+        const size_t                            origin_y,
+        const foundation::AABB2u&               rect);
 
   private:
     typedef foundation::ReadWriteLock<
         foundation::SleepWaitPolicy<5>
     > LockType;
 
-    LockType                                m_lock;
-    std::vector<foundation::FilteredTile*>  m_levels;
-    boost::atomic<foundation::int32>*       m_remaining_pixels;
-    boost::atomic<foundation::uint32>       m_active_level;
+    LockType                                    m_lock;
+    std::vector<foundation::AccumulatorTile*>   m_levels;
+    std::vector<foundation::AccumulatorTile*>   m_read_levels;
+    std::vector<foundation::Vector2f>           m_level_scales;
+    boost::atomic<std::int32_t>*                m_remaining_pixels;
+    boost::atomic<std::uint32_t>                m_active_level;
 };
 
 }   // namespace renderer

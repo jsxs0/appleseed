@@ -37,26 +37,21 @@
 #include "renderer/modeling/bsdf/bsdfsample.h"
 #include "renderer/modeling/bsdf/bsdfwrapper.h"
 #include "renderer/modeling/bsdf/fresnel.h"
+#include "renderer/modeling/bsdf/microfacetbrdfwrapper.h"
 #include "renderer/modeling/bsdf/microfacethelper.h"
-#include "renderer/utility/messagecontext.h"
 #include "renderer/utility/paramarray.h"
 
 // appleseed.foundation headers.
-#include "foundation/math/basis.h"
+#include "foundation/containers/dictionary.h"
+#include "foundation/math/dual.h"
 #include "foundation/math/microfacet.h"
-#include "foundation/math/minmax.h"
-#include "foundation/math/sampling/mappings.h"
 #include "foundation/math/vector.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 #include "foundation/utility/makevector.h"
-#include "foundation/utility/otherwise.h"
 
 // Standard headers.
-#include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <string>
 
 // Forward declarations.
 namespace foundation    { class IAbortSwitch; }
@@ -64,7 +59,6 @@ namespace renderer      { class Assembly; }
 namespace renderer      { class Project; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -89,7 +83,7 @@ namespace
             const Vector3f& n,
             Spectrum&       value) const
         {
-            const float cos_oh = abs(dot(o, h));
+            const float cos_oh = std::abs(dot(o, h));
 
             float f;
             fresnel_reflectance_dielectric(f, m_eta, cos_oh);
@@ -102,6 +96,7 @@ namespace
     };
 
     const char* Model = "blinn_brdf";
+    const char* MicrofacetModel = "microfacet_normal_mapping_blinn_brdf";
 
     class BlinnBRDFImpl
       : public BSDF
@@ -112,8 +107,8 @@ namespace
             const ParamArray&           params)
           : BSDF(name, Reflective, ScatteringMode::Glossy, params)
         {
-            m_inputs.declare("exponent", InputFormatFloat, "0.5");
-            m_inputs.declare("ior", InputFormatFloat, "1.5");
+            m_inputs.declare("exponent", InputFormat::Float, "0.5");
+            m_inputs.declare("ior", InputFormat::Float, "1.5");
         }
 
         void release() override
@@ -146,6 +141,8 @@ namespace
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
+            const LocalGeometry&        local_geometry,
+            const Dual3f&               outgoing,
             const int                   modes,
             BSDFSample&                 sample) const override
         {
@@ -155,25 +152,25 @@ namespace
             const InputValues* values = static_cast<const InputValues*>(data);
 
             const FresnelFun f(values->m_precomputed.m_outside_ior / values->m_ior);
-            MicrofacetBRDFHelper<false>::sample(
+            MicrofacetBRDFHelper<BlinnMDF>::sample(
                 sampling_context,
-                m_mdf,
+                1.0f,
                 values->m_exponent,
                 values->m_exponent,
-                0.0f,
                 f,
+                local_geometry,
+                outgoing,
                 sample);
             sample.m_value.m_beauty = sample.m_value.m_glossy;
-
             sample.m_min_roughness = 1.0f;
+            sample.compute_glossy_reflected_differentials(local_geometry, 1.0f, outgoing);
         }
 
         float evaluate(
             const void*                 data,
             const bool                  adjoint,
             const bool                  cosine_mult,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes,
@@ -186,15 +183,13 @@ namespace
             const FresnelFun f(values->m_precomputed.m_outside_ior / values->m_ior);
 
             const float pdf =
-                MicrofacetBRDFHelper<false>::evaluate(
-                    m_mdf,
+                MicrofacetBRDFHelper<BlinnMDF>::evaluate(
                     values->m_exponent,
                     values->m_exponent,
-                    0.0f,
-                    shading_basis,
+                    f,
+                    local_geometry,
                     outgoing,
                     incoming,
-                    f,
                     value.m_glossy);
             assert(pdf >= 0.0f);
 
@@ -206,8 +201,7 @@ namespace
         float evaluate_pdf(
             const void*                 data,
             const bool                  adjoint,
-            const Vector3f&             geometric_normal,
-            const Basis3f&              shading_basis,
+            const LocalGeometry&        local_geometry,
             const Vector3f&             outgoing,
             const Vector3f&             incoming,
             const int                   modes) const override
@@ -218,12 +212,10 @@ namespace
             const InputValues* values = static_cast<const InputValues*>(data);
 
             const float pdf =
-                MicrofacetBRDFHelper<false>::pdf(
-                    m_mdf,
+                MicrofacetBRDFHelper<BlinnMDF>::pdf(
                     values->m_exponent,
                     values->m_exponent,
-                    0.0f,
-                    shading_basis,
+                    local_geometry,
                     outgoing,
                     incoming);
             assert(pdf >= 0.0f);
@@ -233,11 +225,22 @@ namespace
 
       private:
         typedef BlinnBRDFInputValues InputValues;
+    };
 
-        BlinnMDF m_mdf;
+    class MicrofacetBlinnBRDFImpl
+      : public BlinnBRDFImpl
+    {
+      public:
+        using BlinnBRDFImpl::BlinnBRDFImpl;
+
+        const char* get_model() const override
+        {
+            return MicrofacetModel;
+        }
     };
 
     typedef BSDFWrapper<BlinnBRDFImpl> BlinnBRDF;
+    typedef MicrofacetBRDFWrapper<MicrofacetBlinnBRDFImpl> MicrofacetBlinnBRDF;
 }
 
 
@@ -301,6 +304,31 @@ auto_release_ptr<BSDF> BlinnBRDFFactory::create(
     const ParamArray&   params) const
 {
     return auto_release_ptr<BSDF>(new BlinnBRDF(name, params));
+}
+
+
+//
+// MicrofacetBlinnBRDFFactory class implementation.
+//
+
+const char* MicrofacetBlinnBRDFFactory::get_model() const
+{
+    return MicrofacetModel;
+}
+
+Dictionary MicrofacetBlinnBRDFFactory::get_model_metadata() const
+{
+    return
+        Dictionary()
+            .insert("name", MicrofacetModel)
+            .insert("label", "Microfacet Blinn BRDF");
+}
+
+auto_release_ptr<BSDF> MicrofacetBlinnBRDFFactory::create(
+    const char*         name,
+    const ParamArray&   params) const
+{
+    return auto_release_ptr<BSDF>(new MicrofacetBlinnBRDF(name, params));
 }
 
 }   // namespace renderer

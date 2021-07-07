@@ -35,8 +35,8 @@
 #include "foundation/math/sampling/qmcsamplingcontext.h"
 #include "foundation/math/scalar.h"
 #include "foundation/math/vector.h"
+#include "foundation/string/string.h"
 #include "foundation/utility/iostreamop.h"
-#include "foundation/utility/string.h"
 #include "foundation/utility/test.h"
 #include "foundation/utility/testutils.h"
 #include "foundation/utility/vpythonfile.h"
@@ -49,7 +49,6 @@
 #include <vector>
 
 using namespace foundation;
-using namespace std;
 
 TEST_SUITE(Foundation_Math_Sampling_QMCSamplingContext)
 {
@@ -141,7 +140,7 @@ TEST_SUITE(Foundation_Math_Sampling_QMCSamplingContext_DirectIlluminationSimulat
     void shade(
         const SamplingContext&      context,
         const size_t                light_sample_count,
-        vector<Vector2d>&           light_samples)
+        std::vector<Vector2d>&      light_samples)
     {
         SamplingContext child_context = context.split(2, light_sample_count);
 
@@ -164,8 +163,8 @@ TEST_SUITE(Foundation_Math_Sampling_QMCSamplingContext_DirectIlluminationSimulat
             pixel_sample_count,
             0);
 
-        vector<Vector2d> pixel_samples;
-        vector<Vector2d> light_samples;
+        std::vector<Vector2d> pixel_samples;
+        std::vector<Vector2d> light_samples;
 
         for (size_t i = 0; i < pixel_sample_count; ++i)
         {
@@ -174,7 +173,7 @@ TEST_SUITE(Foundation_Math_Sampling_QMCSamplingContext_DirectIlluminationSimulat
             shade(sampling_context, light_sample_count, light_samples);
         }
 
-        const string filepath_prefix =
+        const std::string filepath_prefix =
             format("unit tests/outputs/test_sampling_P{0}_L{1}", pixel_sample_count, light_sample_count);
 
         write_point_cloud_image(filepath_prefix + "_pixel_samples.png", pixel_samples);
@@ -230,12 +229,6 @@ TEST_SUITE(Foundation_Math_Sampling_Mappings)
     }
 
     template <typename T>
-    Vector<T, 2> to_unit_square(const Vector<T, 2>& p)
-    {
-        return Vector<T, 2>(0.5) + T(0.4) * p;
-    }
-
-    template <typename T>
     T sample_hemisphere_uniform_pdf(const Vector<T, 3>& dir)
     {
         return RcpTwoPi<T>();
@@ -262,40 +255,90 @@ TEST_SUITE(Foundation_Math_Sampling_Mappings)
     template <typename T>
     Vector<T, 3> sample_cone_uniform_30deg(const Vector<T, 2>& s)
     {
-        return sample_cone_uniform(s, cos(deg_to_rad(30.0)));
+        return sample_cone_uniform(s, std::cos(deg_to_rad(30.0)));
     }
 
     template <typename T>
     T sample_cone_uniform_30deg_pdf(const Vector<T, 3>& dir)
     {
-        return sample_cone_uniform_pdf(cos(deg_to_rad(30.0)));
+        return sample_cone_uniform_pdf(std::cos(deg_to_rad(30.0)));
     }
 
     template <typename SamplingFunction>
-    void visualize_2d_function_as_image(
-        const string&       filename,
-        SamplingFunction&   sampling_function,
-        const size_t        point_count)
+    void visualize_2d_function_as_image_regular(
+        const std::string&       filename,
+        SamplingFunction&        sampling_function,
+        const size_t             point_count)
     {
-        vector<Vector2d> points(point_count);
+        const size_t grid_size = truncate<size_t>(std::ceil(std::sqrt(static_cast<double>(point_count))));
+        const double AlmostOne = shift(1.0, -1);
+
+        std::vector<Vector2d> points;
+        points.reserve(grid_size * grid_size);
+
+        for (size_t y = 0; y < grid_size; ++y)
+        {
+            for (size_t x = 0; x < grid_size; ++x)
+            {
+                const Vector2d s(
+                    fit<size_t, double>(x, 0, grid_size - 1, 0.0, AlmostOne),
+                    fit<size_t, double>(y, 0, grid_size - 1, 0.0, AlmostOne));
+                points.push_back(sampling_function(s));
+            }
+        }
+
+        fit_point_cloud_to_image(points);
+
+        write_point_cloud_image(filename, 512, 512, points);
+    }
+
+    template <typename SamplingFunction>
+    void visualize_2d_function_as_image_hammersley(
+        const std::string&       filename,
+        SamplingFunction&        sampling_function,
+        const size_t             point_count)
+    {
+        std::vector<Vector2d> points(point_count);
 
         for (size_t i = 0; i < point_count; ++i)
         {
             const size_t Bases[] = { 2 };
             const Vector2d s = hammersley_sequence<double, 2>(Bases, point_count, i);
-            points[i] = to_unit_square(sampling_function(s));
+            points[i] = sampling_function(s);
         }
+
+        fit_point_cloud_to_image(points);
+
+        write_point_cloud_image(filename, 512, 512, points);
+    }
+
+    template <typename SamplingFunction>
+    void visualize_2d_function_as_image_halton(
+        const std::string&       filename,
+        SamplingFunction&        sampling_function,
+        const size_t             point_count)
+    {
+        std::vector<Vector2d> points(point_count);
+
+        for (size_t i = 0; i < point_count; ++i)
+        {
+            const size_t Bases[] = { 2, 3 };
+            const Vector2d s = halton_sequence<double, 2>(Bases, i);
+            points[i] = sampling_function(s);
+        }
+
+        fit_point_cloud_to_image(points);
 
         write_point_cloud_image(filename, 512, 512, points);
     }
 
     template <typename SamplingFunction>
     void visualize_3d_function_as_vpython_program(
-        const string&       filename,
-        SamplingFunction&   sampling_function,
-        const size_t        point_count)
+        const std::string&       filename,
+        SamplingFunction&        sampling_function,
+        const size_t             point_count)
     {
-        vector<Vector3d> points(point_count);
+        std::vector<Vector3d> points(point_count);
 
         for (size_t i = 0; i < point_count; ++i)
         {
@@ -340,20 +383,54 @@ TEST_SUITE(Foundation_Math_Sampling_Mappings)
             512);
     }
 
-    TEST_CASE(SampleDiskUniform_GenerateImage)
+    const size_t PointCountInImages = 768;
+
+    TEST_CASE(SampleDiskUniformRegular_GenerateImage)
     {
-        visualize_2d_function_as_image(
-            "unit tests/outputs/test_sampling_sample_disk_uniform.png",
+        visualize_2d_function_as_image_regular(
+            "unit tests/outputs/test_sampling_sample_disk_uniform_regular.png",
             sample_disk_uniform<double>,
-            256);
+            PointCountInImages);
     }
 
-    TEST_CASE(SampleDiskUniformAlt_GenerateImage)
+    TEST_CASE(SampleDiskUniformHammersley_GenerateImage)
     {
-        visualize_2d_function_as_image(
-            "unit tests/outputs/test_sampling_sample_disk_uniform_alt.png",
+        visualize_2d_function_as_image_hammersley(
+            "unit tests/outputs/test_sampling_sample_disk_uniform_hammersley.png",
+            sample_disk_uniform<double>,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleDiskUniformHalton_GenerateImage)
+    {
+        visualize_2d_function_as_image_halton(
+            "unit tests/outputs/test_sampling_sample_disk_uniform_halton.png",
+            sample_disk_uniform<double>,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleDiskUniformAltRegular_GenerateImage)
+    {
+        visualize_2d_function_as_image_regular(
+            "unit tests/outputs/test_sampling_sample_disk_uniform_alt_regular.png",
             sample_disk_uniform_alt<double>,
-            256);
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleDiskUniformAltHammersley_GenerateImage)
+    {
+        visualize_2d_function_as_image_hammersley(
+            "unit tests/outputs/test_sampling_sample_disk_uniform_alt_hammersley.png",
+            sample_disk_uniform_alt<double>,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleDiskUniformAltHalton_GenerateImage)
+    {
+        visualize_2d_function_as_image_halton(
+            "unit tests/outputs/test_sampling_sample_disk_uniform_alt_halton.png",
+            sample_disk_uniform_alt<double>,
+            PointCountInImages);
     }
 
     TEST_CASE(SampleConeUniform_GenerateVPythonProgram)
@@ -372,28 +449,121 @@ TEST_SUITE(Foundation_Math_Sampling_Mappings)
             256);
     }
 
-    TEST_CASE(SampleRegularPolygonUniform_GenerateVPythonProgram)
+    namespace
     {
-        const size_t VertexCount = 6;
-        const size_t PointCount = 512;
-
-        Vector2d vertices[VertexCount];
-        build_regular_polygon(VertexCount, 0.0, vertices);
-
-        vector<Vector2d> points(PointCount);
-
-        for (size_t i = 0; i < PointCount; ++i)
+        template <typename T>
+        Vector<T, 2> sample_triangle_uniform_2d(const Vector<T, 2>& s)
         {
-            const size_t Bases[] = { 2, 3 };
-            const Vector3d s = hammersley_sequence<double, 3>(Bases, PointCount, i);
-            const Vector2d p = sample_regular_polygon_uniform(s, VertexCount, vertices);
-            points[i] = to_unit_square(p);
+            // Flip triangle to match the orientation in the paper.
+            const Vector<T, 3> b = sample_triangle_uniform(s);
+            return Vector<T, 2>(b[0], T(1.0) - b[1]);
+        }
+    }
+
+    TEST_CASE(SampleTriangleUniformRegular_GenerateImage)
+    {
+        visualize_2d_function_as_image_regular(
+            "unit tests/outputs/test_sampling_sample_triangle_uniform_regular.png",
+            sample_triangle_uniform_2d<double>,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleTriangleUniformHammersley_GenerateImage)
+    {
+        visualize_2d_function_as_image_hammersley(
+            "unit tests/outputs/test_sampling_sample_triangle_uniform_hammersley.png",
+            sample_triangle_uniform_2d<double>,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleTriangleUniformHalton_GenerateImage)
+    {
+        visualize_2d_function_as_image_halton(
+            "unit tests/outputs/test_sampling_sample_triangle_uniform_halton.png",
+            sample_triangle_uniform_2d<double>,
+            PointCountInImages);
+    }
+
+    namespace
+    {
+        template <typename T>
+        Vector<T, 2> sample_triangle_uniform_heitz_2d(const Vector<T, 2>& s)
+        {
+            // Flip triangle to match the orientation in the paper.
+            const Vector<T, 3> b = sample_triangle_uniform_heitz(s);
+            return Vector<T, 2>(b[0], T(1.0) - b[1]);
+        }
+    }
+
+    TEST_CASE(SampleTriangleUniformHeitzRegular_GenerateImage)
+    {
+        visualize_2d_function_as_image_regular(
+            "unit tests/outputs/test_sampling_sample_triangle_uniform_heitz_regular.png",
+            sample_triangle_uniform_heitz_2d<double>,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleTriangleUniformHeitzHammersley_GenerateImage)
+    {
+        visualize_2d_function_as_image_hammersley(
+            "unit tests/outputs/test_sampling_sample_triangle_uniform_heitz_hammersley.png",
+            sample_triangle_uniform_heitz_2d<double>,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleTriangleUniformHeitzHalton_GenerateImage)
+    {
+        visualize_2d_function_as_image_halton(
+            "unit tests/outputs/test_sampling_sample_triangle_uniform_heitz_halton.png",
+            sample_triangle_uniform_heitz_2d<double>,
+            PointCountInImages);
+    }
+
+    struct PolygonSampler
+    {
+        static const size_t VertexCount = 6;
+
+        Vector2d m_vertices[VertexCount];
+
+        PolygonSampler()
+        {
+            build_regular_polygon(VertexCount, 0.0, m_vertices);
         }
 
-        write_point_cloud_image(
-            "unit tests/outputs/test_sampling_sample_regular_polygon_uniform.png",
-            512, 512,
-            points);
+        Vector2d operator()(const Vector2d s) const
+        {
+            return sample_regular_polygon_uniform(s, VertexCount, m_vertices);
+        }
+    };
+
+    TEST_CASE(SampleRegularPolygonUniformRegular_GenerateImage)
+    {
+        const PolygonSampler polygon_sampler;
+
+        visualize_2d_function_as_image_regular(
+            "unit tests/outputs/test_sampling_sample_regular_polygon_uniform_regular.png",
+            polygon_sampler,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleRegularPolygonUniformHammersley_GenerateImage)
+    {
+        const PolygonSampler polygon_sampler;
+
+        visualize_2d_function_as_image_hammersley(
+            "unit tests/outputs/test_sampling_sample_regular_polygon_uniform_hammersley.png",
+            polygon_sampler,
+            PointCountInImages);
+    }
+
+    TEST_CASE(SampleRegularPolygonUniformHalton_GenerateImage)
+    {
+        const PolygonSampler polygon_sampler;
+
+        visualize_2d_function_as_image_halton(
+            "unit tests/outputs/test_sampling_sample_regular_polygon_uniform_halton.png",
+            polygon_sampler,
+            PointCountInImages);
     }
 
     template <typename F, typename Sample, typename PDF>

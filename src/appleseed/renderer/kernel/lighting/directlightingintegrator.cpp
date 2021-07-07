@@ -52,7 +52,6 @@
 #include <cmath>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -66,7 +65,7 @@ namespace renderer
 //       take_single_material_sample
 //
 //   compute_outgoing_radiance_light_sampling_low_variance
-//       add_emitting_triangle_sample_contribution
+//       add_emitting_shape_sample_contribution
 //       add_non_physical_light_sample_contribution
 //
 //   compute_outgoing_radiance_combined_sampling_low_variance
@@ -97,10 +96,10 @@ DirectLightingIntegrator::DirectLightingIntegrator(
 }
 
 void DirectLightingIntegrator::compute_outgoing_radiance_material_sampling(
-    SamplingContext&            sampling_context,
-    const MISHeuristic          mis_heuristic,
-    const Dual3d&               outgoing,
-    DirectShadingComponents&    radiance) const
+    SamplingContext&                sampling_context,
+    const MISHeuristic              mis_heuristic,
+    const Dual3d&                   outgoing,
+    DirectShadingComponents&        radiance) const
 {
     radiance.set(0.0f);
 
@@ -122,11 +121,11 @@ void DirectLightingIntegrator::compute_outgoing_radiance_material_sampling(
 }
 
 void DirectLightingIntegrator::compute_outgoing_radiance_light_sampling_low_variance(
-    SamplingContext&            sampling_context,
-    const MISHeuristic          mis_heuristic,
-    const Dual3d&               outgoing,
-    DirectShadingComponents&    radiance,
-    LightPathStream*            light_path_stream) const
+    SamplingContext&                sampling_context,
+    const MISHeuristic              mis_heuristic,
+    const Dual3d&                   outgoing,
+    DirectShadingComponents&        radiance,
+    LightPathStream*                light_path_stream) const
 {
     radiance.set(0.0f);
 
@@ -140,10 +139,10 @@ void DirectLightingIntegrator::compute_outgoing_radiance_light_sampling_low_vari
 
     if (m_light_sample_count > 0)
     {
-        // Add contributions from non-physical light sources that don't belong to the lightset.
+        // Add contributions from all non-physical light sources that aren't part of the lightset.
         for (size_t i = 0, e = m_light_sampler.get_non_physical_light_count(); i < e; ++i)
         {
-            // Sample the set of non-physical lights.
+            // Sample the light.
             LightSample sample;
             m_light_sampler.sample_non_physical_light(m_time, i, sample);
 
@@ -175,9 +174,9 @@ void DirectLightingIntegrator::compute_outgoing_radiance_light_sampling_low_vari
                 sample);
 
             // Add the contribution of the chosen light.
-            if (sample.m_triangle)
+            if (sample.m_shape)
             {
-                add_emitting_triangle_sample_contribution(
+                add_emitting_shape_sample_contribution(
                     sampling_context,
                     sample,
                     mis_heuristic,
@@ -204,10 +203,10 @@ void DirectLightingIntegrator::compute_outgoing_radiance_light_sampling_low_vari
 }
 
 void DirectLightingIntegrator::compute_outgoing_radiance_combined_sampling_low_variance(
-    SamplingContext&            sampling_context,
-    const Dual3d&               outgoing,
-    DirectShadingComponents&    radiance,
-    LightPathStream*            light_path_stream) const
+    SamplingContext&                sampling_context,
+    const Dual3d&                   outgoing,
+    DirectShadingComponents&        radiance,
+    LightPathStream*                light_path_stream) const
 {
     compute_outgoing_radiance_material_sampling(
         sampling_context,
@@ -227,10 +226,10 @@ void DirectLightingIntegrator::compute_outgoing_radiance_combined_sampling_low_v
 }
 
 void DirectLightingIntegrator::take_single_material_sample(
-    SamplingContext&            sampling_context,
-    const MISHeuristic          mis_heuristic,
-    const Dual3d&               outgoing,
-    DirectShadingComponents&    radiance) const
+    SamplingContext&                sampling_context,
+    const MISHeuristic              mis_heuristic,
+    const Dual3d&                   outgoing,
+    DirectShadingComponents&        radiance) const
 {
     assert(m_light_sampler.has_hittable_lights());
 
@@ -313,8 +312,10 @@ void DirectLightingIntegrator::take_single_material_sample(
             const float material_prob_area = sample_probability * cos_on / static_cast<float>(square_distance);
 
             // Compute the probability density wrt. surface area measure of the light sample.
-            const float light_prob_area = m_light_sampler.evaluate_pdf(
-                light_shading_point, m_material_sampler.get_shading_point());
+            const float light_prob_area =
+                m_light_sampler.evaluate_pdf(
+                    light_shading_point,
+                    m_material_sampler.get_shading_point());
 
             // Apply the weighting function.
             weight *=
@@ -335,15 +336,15 @@ void DirectLightingIntegrator::take_single_material_sample(
     madd(radiance, sample_value, edf_value);
 }
 
-void DirectLightingIntegrator::add_emitting_triangle_sample_contribution(
-    SamplingContext&            sampling_context,
-    const LightSample&          sample,
-    const MISHeuristic          mis_heuristic,
-    const Dual3d&               outgoing,
-    DirectShadingComponents&    radiance,
-    LightPathStream*            light_path_stream) const
+void DirectLightingIntegrator::add_emitting_shape_sample_contribution(
+    SamplingContext&                sampling_context,
+    const LightSample&              sample,
+    const MISHeuristic              mis_heuristic,
+    const Dual3d&                   outgoing,
+    DirectShadingComponents&        radiance,
+    LightPathStream*                light_path_stream) const
 {
-    const Material* material = sample.m_triangle->m_material;
+    const Material* material = sample.m_shape->get_material();
     const Material::RenderData& material_data = material->get_render_data();
     const EDF* edf = material_data.m_edf;
 
@@ -367,7 +368,7 @@ void DirectLightingIntegrator::add_emitting_triangle_sample_contribution(
         return;
 
     const double rcp_sample_square_distance = 1.0 / square_distance;
-    const double rcp_sample_distance = sqrt(rcp_sample_square_distance);
+    const double rcp_sample_distance = std::sqrt(rcp_sample_square_distance);
 
     // Normalize the incoming direction.
     cos_on *= rcp_sample_distance;
@@ -382,15 +383,14 @@ void DirectLightingIntegrator::add_emitting_triangle_sample_contribution(
             static_cast<float>(
                 cos_on *
                 rcp_sample_square_distance *
-                edf->get_max_contribution() *
-                sample.m_triangle->m_area);
+                sample.m_shape->get_max_flux());
 
         // Use Russian Roulette to skip this sample if its maximum contribution is low.
         if (max_contribution < m_low_light_threshold)
         {
             // Generate a uniform sample in [0,1).
-            sampling_context.split_in_place(1, 1);
-            const float s = sampling_context.next2<float>();
+            SamplingContext child_sampling_context = sampling_context.split(1, 1);
+            const float s = child_sampling_context.next2<float>();
 
             // Compute the probability of taking the sample's contribution into account.
             contribution_prob = max_contribution / m_low_light_threshold;
@@ -416,9 +416,9 @@ void DirectLightingIntegrator::add_emitting_triangle_sample_contribution(
     DirectShadingComponents material_value;
     const float material_probability =
         m_material_sampler.evaluate(
-            m_light_sampling_modes,
             Vector3f(outgoing.get_value()),
             Vector3f(incoming),
+            m_light_sampling_modes,
             material_value);
     assert(material_probability >= 0.0f);
     if (material_probability == 0.0f)
@@ -447,6 +447,7 @@ void DirectLightingIntegrator::add_emitting_triangle_sample_contribution(
         -Vector3f(incoming),
         edf_value);
 
+    // Compute geometric term.
     const float g = static_cast<float>(cos_on * rcp_sample_square_distance);
 
     // Apply MIS weighting.
@@ -464,8 +465,8 @@ void DirectLightingIntegrator::add_emitting_triangle_sample_contribution(
     // Record light path event.
     if (light_path_stream)
     {
-        light_path_stream->sampled_emitting_triangle(
-            *sample.m_triangle,
+        light_path_stream->sampled_emitting_shape(
+            *sample.m_shape,
             sample.m_point,
             material_value.m_beauty,
             edf_value);
@@ -473,11 +474,11 @@ void DirectLightingIntegrator::add_emitting_triangle_sample_contribution(
 }
 
 void DirectLightingIntegrator::add_non_physical_light_sample_contribution(
-    SamplingContext&            sampling_context,
-    const LightSample&          sample,
-    const Dual3d&               outgoing,
-    DirectShadingComponents&    radiance,
-    LightPathStream*            light_path_stream) const
+    SamplingContext&                sampling_context,
+    const LightSample&              sample,
+    const Dual3d&                   outgoing,
+    DirectShadingComponents&        radiance,
+    LightPathStream*                light_path_stream) const
 {
     const Light* light = sample.m_light;
 
@@ -485,7 +486,7 @@ void DirectLightingIntegrator::add_non_physical_light_sample_contribution(
     if (m_indirect && !(light->get_flags() & Light::CastIndirectLight))
         return;
 
-    // Generate a uniform sample in [0,1).
+    // Generate a uniform sample in [0,1)^2.
     SamplingContext child_sampling_context = sampling_context.split(2, 1);
     const Vector2d s = child_sampling_context.next2<Vector2d>();
 
@@ -508,22 +509,26 @@ void DirectLightingIntegrator::add_non_physical_light_sample_contribution(
 
     // Compute the transmission factor between the light sample and the shading point.
     Spectrum transmission;
-    m_material_sampler.trace_between(
-        m_shading_context,
-        emission_position,
-        transmission);
+    if (light->get_flags() & Light::CastShadows)
+    {
+        m_material_sampler.trace_between(
+            m_shading_context,
+            emission_position,
+            transmission);
 
-    // Discard occluded samples.
-    if (is_zero(transmission))
-        return;
+        // Discard occluded samples.
+        if (is_zero(transmission))
+            return;
+    }
+    else transmission.set(1.0f);
 
     // Evaluate the BSDF (or volume).
     DirectShadingComponents material_value;
     const float material_probability =
         m_material_sampler.evaluate(
-            m_light_sampling_modes,
             Vector3f(outgoing.get_value()),
             Vector3f(incoming),
+            m_light_sampling_modes,
             material_value);
     assert(material_probability >= 0.0f);
     if (material_probability == 0.0f)

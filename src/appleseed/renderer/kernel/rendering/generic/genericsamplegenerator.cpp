@@ -45,20 +45,20 @@
 // appleseed.foundation headers.
 #include "foundation/image/canvasproperties.h"
 #include "foundation/image/image.h"
+#include "foundation/math/filtersamplingtable.h"
 #include "foundation/math/population.h"
 #include "foundation/math/qmc.h"
 #include "foundation/math/scalar.h"
 #include "foundation/math/vector.h"
-#include "foundation/platform/types.h"
-#include "foundation/utility/autoreleaseptr.h"
+#include "foundation/memory/autoreleaseptr.h"
 #include "foundation/utility/statistics.h"
 
 // Standard headers.
 #include <cassert>
+#include <cstdint>
 #include <vector>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -86,6 +86,7 @@ namespace
           , m_sample_renderer(sample_renderer_factory->create(generator_index))
           , m_window_width_next_pow2(next_power(static_cast<double>(m_window_width), 2.0))
           , m_window_height_next_pow3(next_power(static_cast<double>(m_window_height), 3.0))
+          , m_filter_sampling_table(frame.get_filter_sampling_table())
         {
         }
 
@@ -141,7 +142,9 @@ namespace
         const double                        m_window_width_next_pow2;
         const double                        m_window_height_next_pow3;
 
-        Population<uint64>                  m_total_sampling_dim;
+        const FilterSamplingTable&          m_filter_sampling_table;
+
+        Population<std::uint64_t>           m_total_sampling_dim;
 
         AOVAccumulatorContainer             m_aov_accumulators;
 
@@ -162,17 +165,6 @@ namespace
             if (x >= m_window_width || y >= m_window_height)
                 return 0;
 
-            // Transform the sample position back to NDC. Full precision divisions are required
-            // to ensure that the sample position indeed lies in the [0,1)^2 interval.
-            const Vector2d sample_position(
-                (m_window_origin_x + t[0]) / m_canvas_width,
-                (m_window_origin_y + t[1]) / m_canvas_height);
-
-            // Create a pixel context that identifies the pixel and sample currently being rendered.
-            const PixelContext pixel_context(
-                Vector2i(m_window_origin_x + x, m_window_origin_y + y),
-                sample_position);
-
             // Create a sampling context. We start with an initial dimension of 2,
             // corresponding to the Halton sequence used for the sample positions.
             SamplingContext sampling_context(
@@ -181,6 +173,23 @@ namespace
                 2,                          // number of dimensions
                 sequence_index,             // number of samples
                 sequence_index);            // initial instance number
+
+            // Sample the pixel filter.
+            sampling_context.split_in_place(2, 1);
+            const Vector2f f = sampling_context.next2<Vector2f>();
+            const Vector2d pf(
+                static_cast<double>(m_filter_sampling_table.sample(f.x)) + 0.5,
+                static_cast<double>(m_filter_sampling_table.sample(f.y)) + 0.5);
+
+            // Transform the sample position back to NDC.
+            const Vector2d sample_position(
+                (m_window_origin_x + x + pf[0]) / m_canvas_width,
+                (m_window_origin_y + y + pf[1]) / m_canvas_height);
+
+            // Create a pixel context that identifies the pixel and sample currently being rendered.
+            const PixelContext pixel_context(
+                Vector2i(m_window_origin_x + x, m_window_origin_y + y),
+                sample_position);
 
             // Render the sample.
             ShadingResult shading_result;
@@ -203,7 +212,7 @@ namespace
 
             // Create a single sample.
             Sample sample;
-            sample.m_position = Vector2f(sample_position);
+            sample.m_pixel_coords = pixel_context.get_pixel_coords();
             sample.m_color = shading_result.m_main;
             samples.push_back(sample);
 
@@ -252,8 +261,7 @@ SampleAccumulationBuffer* GenericSampleGeneratorFactory::create_sample_accumulat
     return
         new LocalSampleAccumulationBuffer(
             props.m_canvas_width,
-            props.m_canvas_height,
-            m_frame.get_filter());
+            props.m_canvas_height);
 }
 
 }   // namespace renderer

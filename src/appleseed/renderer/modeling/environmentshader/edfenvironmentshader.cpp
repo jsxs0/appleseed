@@ -32,27 +32,30 @@
 
 // appleseed.renderer headers.
 #include "renderer/global/globallogger.h"
+#include "renderer/kernel/shading/shadingcomponents.h"
+#include "renderer/kernel/shading/shadingresult.h"
+#include "renderer/modeling/color/colorspace.h"
 #include "renderer/modeling/environmentedf/environmentedf.h"
 #include "renderer/modeling/environmentshader/environmentshader.h"
 #include "renderer/utility/messagecontext.h"
 #include "renderer/utility/paramarray.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
+#include "foundation/image/color.h"
 #include "foundation/math/vector.h"
-#include "foundation/utility/api/apistring.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 
 // Standard headers.
 #include <string>
 
 // Forward declarations.
 namespace foundation    { class IAbortSwitch; }
+namespace renderer      { class AOVComponents; }
 namespace renderer      { class PixelContext; }
 namespace renderer      { class Project; }
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -75,8 +78,8 @@ namespace
           : EnvironmentShader(name, params)
           , m_env_edf(nullptr)
         {
-            m_inputs.declare("environment_edf", InputFormatEntity);
-            m_inputs.declare("alpha_value", InputFormatFloat, "1.0");
+            m_inputs.declare("environment_edf", InputFormat::Entity);
+            m_inputs.declare("alpha_value", InputFormat::Float, "1.0");
         }
 
         void release() override
@@ -109,7 +112,7 @@ namespace
                 RENDERER_LOG_ERROR(
                     "%scannot find environment edf \"%s\".",
                     context.get(),
-                    m_params.get_required<string>("environment_edf", "").c_str());
+                    m_params.get_required<std::string>("environment_edf", "").c_str());
                 return false;
             }
 
@@ -125,12 +128,17 @@ namespace
             const ShadingContext&   shading_context,
             const PixelContext&     pixel_context,
             const Vector3d&         direction,
-            Spectrum&               value,
-            Alpha&                  alpha) const override
+            ShadingResult&          shading_result,
+            ShadingComponents&      shading_components,
+            AOVComponents&          aov_components) const override
         {
-            // Evaluate the environment EDF and store the radiance into the shading result.
+            Spectrum value;
             m_env_edf->evaluate(shading_context, Vector3f(direction), value);
-            alpha = Alpha(m_alpha_value);
+
+            shading_components.m_emission = value;
+
+            shading_result.m_main.rgb() = value.illuminance_to_rgb(g_std_lighting_conditions);
+            shading_result.m_main.a = m_alpha_value;
         }
 
       private:

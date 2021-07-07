@@ -50,29 +50,28 @@
 #include "renderer/utility/transformsequence.h"
 
 // appleseed.foundation headers.
+#include "foundation/containers/dictionary.h"
+#include "foundation/hash/hash.h"
 #include "foundation/image/color.h"
 #include "foundation/image/colorspace.h"
 #include "foundation/math/aabb.h"
 #include "foundation/math/distance.h"
-#include "foundation/math/hash.h"
 #include "foundation/math/minmax.h"
 #include "foundation/math/sampling/mappings.h"
 #include "foundation/math/scalar.h"
 #include "foundation/math/vector.h"
-#include "foundation/platform/types.h"
 #include "foundation/utility/api/specializedapiarrays.h"
-#include "foundation/utility/containers/dictionary.h"
 #include "foundation/utility/otherwise.h"
 
 // Standard headers.
 #include <algorithm>
 #include <cassert>
-#include <cstddef>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 using namespace foundation;
-using namespace std;
 
 namespace renderer
 {
@@ -105,7 +104,9 @@ const KeyValuePair<const char*, DiagnosticSurfaceShader::ShadingMode>
     { "world_space_wireframe" ,     WorldSpaceWireframe },
     { "screen_space_wireframe" ,    ScreenSpaceWireframe },
     { "ambient_occlusion",          AmbientOcclusion },
+    { "assemblies",                 Assemblies },
     { "assembly_instances",         AssemblyInstances },
+    { "objects",                    Objects },
     { "object_instances",           ObjectInstances },
     { "primitives",                 Primitives },
     { "materials",                  Materials },
@@ -132,7 +133,9 @@ const KeyValuePair<const char*, const char*> DiagnosticSurfaceShader::ShadingMod
     { "world_space_wireframe",      "World-Space Wireframe" },
     { "screen_space_wireframe",     "Screen-Space Wireframe" },
     { "ambient_occlusion",          "Ambient Occlusion" },
+    { "assemblies",                 "Assemblies" },
     { "assembly_instances",         "Assembly Instances" },
+    { "objects",                    "Objects" },
     { "object_instances",           "Object Instances" },
     { "primitives",                 "Primitives" },
     { "materials",                  "Materials" },
@@ -150,7 +153,7 @@ struct DiagnosticSurfaceShader::Impl
     explicit Impl(const ParamArray& params)
     {
         // Retrieve shading mode.
-        const string mode_string = params.get_required<string>("mode", "coverage");
+        const std::string mode_string = params.get_required<std::string>("mode", "coverage");
         const KeyValuePair<const char*, ShadingMode>* mode_pair =
             lookup_kvpair_array(ShadingModeValues, ShadingModeCount, mode_string);
         if (mode_pair != nullptr)
@@ -224,7 +227,7 @@ namespace
     {
         if (x < T(0.0) || x > T(1.0))
         {
-            const T y = fmod(x, T(1.0));
+            const T y = std::fmod(x, T(1.0));
             return y < T(0.0) ? y + T(1.0) : y;
         }
         else return x;
@@ -238,14 +241,14 @@ namespace
 
 #ifdef SHADE_VECTORS_USING_3DSMAX_CONVENTIONS
         return Color3f(
-            static_cast<float>(( vec[0] + T(1.0)) * T(0.5)),
-            static_cast<float>((-vec[2] + T(1.0)) * T(0.5)),
-            static_cast<float>(( vec[1] + T(1.0)) * T(0.5)));
+            saturate(( static_cast<float>(vec[0]) + 1.0f) * 0.5f),
+            saturate((-static_cast<float>(vec[2]) + 1.0f) * 0.5f),
+            saturate(( static_cast<float>(vec[1]) + 1.0f) * 0.5f));
 #else
         return Color3f(
-            static_cast<float>((vec[0] + T(1.0)) * T(0.5)),
-            static_cast<float>((vec[1] + T(1.0)) * T(0.5)),
-            static_cast<float>((vec[2] + T(1.0)) * T(0.5)));
+            saturate((static_cast<float>(vec[0]) + 1.0f) * 0.5f),
+            saturate((static_cast<float>(vec[1]) + 1.0f) * 0.5f),
+            saturate((static_cast<float>(vec[2]) + 1.0f) * 0.5f));
 #endif
     }
 
@@ -268,7 +271,7 @@ namespace
         ShadingResult&  shading_result,
         const Spectrum& value)
     {
-        shading_result.m_main.rgb() = value.to_rgb(g_std_lighting_conditions);
+        shading_result.m_main.rgb() = value.illuminance_to_rgb(g_std_lighting_conditions);
         shading_result.m_main.a = 1.0f;
     }
 }
@@ -292,7 +295,7 @@ void DiagnosticSurfaceShader::evaluate(
         {
             const Vector3d& normal = shading_point.get_shading_normal();
             const Vector3d& view = shading_point.get_ray().m_dir;
-            const double facing = abs(dot(normal, view));
+            const double facing = std::abs(dot(normal, view));
             set_shading_result(
                 shading_result,
                 Color3f(static_cast<float>(facing)));
@@ -321,15 +324,22 @@ void DiagnosticSurfaceShader::evaluate(
                     const ShadingRay& ray = shading_point.get_ray();
                     const Dual3d outgoing(
                         -ray.m_dir,
-                        ray.m_dir - ray.m_rx.m_dir,
-                        ray.m_dir - ray.m_ry.m_dir);
+                        -ray.m_rx_dir,
+                        -ray.m_ry_dir);
 
-                    BSDFSample sample(&shading_point, Dual3f(outgoing));
+                    BSDF::LocalGeometry local_geometry;
+                    local_geometry.m_shading_point = &shading_point;
+                    local_geometry.m_geometric_normal = Vector3f(shading_point.get_geometric_normal());
+                    local_geometry.m_shading_basis = Basis3f(shading_point.get_shading_basis());
+
+                    BSDFSample sample;
                     material_data.m_bsdf->sample(
                         sampling_context,
                         material_data.m_bsdf->evaluate_inputs(shading_context, shading_point),
                         false,
                         false,
+                        local_geometry,
+                        Dual3f(outgoing),
                         ScatteringMode::All,
                         sample);
 
@@ -512,7 +522,7 @@ void DiagnosticSurfaceShader::evaluate(
                     // Retrieve the time, the scene and the camera.
                     const float time = shading_point.get_time().m_absolute;
                     const Scene& scene = shading_point.get_scene();
-                    const Camera& camera = *scene.get_active_camera();
+                    const Camera& camera = *scene.get_render_data().m_active_camera;
 
                     // Compute the film space coordinates of the intersection point.
                     Vector2d point_ndc;
@@ -576,10 +586,22 @@ void DiagnosticSurfaceShader::evaluate(
         }
         break;
 
+      case Assemblies:
+        set_shading_result(
+            shading_result,
+            integer_to_color3<float>(shading_point.get_assembly().get_uid()));
+        break;
+
       case AssemblyInstances:
         set_shading_result(
             shading_result,
             integer_to_color3<float>(shading_point.get_assembly_instance().get_uid()));
+        break;
+
+      case Objects:
+        set_shading_result(
+            shading_result,
+            integer_to_color3<float>(shading_point.get_object().get_uid()));
         break;
 
       case ObjectInstances:
@@ -590,10 +612,10 @@ void DiagnosticSurfaceShader::evaluate(
 
       case Primitives:
         {
-            const uint32 h =
+            const std::uint32_t h =
                 mix_uint32(
-                    static_cast<uint32>(shading_point.get_object_instance().get_uid()),
-                    static_cast<uint32>(shading_point.get_primitive_index()));
+                    static_cast<std::uint32_t>(shading_point.get_object_instance().get_uid()),
+                    static_cast<std::uint32_t>(shading_point.get_primitive_index()));
             set_shading_result(shading_result, integer_to_color3<float>(h));
         }
         break;
@@ -630,15 +652,22 @@ void DiagnosticSurfaceShader::evaluate(
                 {
                     const Dual3d outgoing(
                         -ray.m_dir,
-                        ray.m_dir - ray.m_rx.m_dir,
-                        ray.m_dir - ray.m_ry.m_dir);
+                        -ray.m_rx_dir,
+                        -ray.m_ry_dir);
 
-                    BSDFSample sample(&shading_point, Dual3f(outgoing));
+                    BSDF::LocalGeometry local_geometry;
+                    local_geometry.m_shading_point = &shading_point;
+                    local_geometry.m_geometric_normal = Vector3f(shading_point.get_geometric_normal());
+                    local_geometry.m_shading_basis = Basis3f(shading_point.get_shading_basis());
+
+                    BSDFSample sample;
                     material_data.m_bsdf->sample(
                         sampling_context,
                         material_data.m_bsdf->evaluate_inputs(shading_context, shading_point),
                         false,
                         false,
+                        local_geometry,
+                        Dual3f(outgoing),
                         ScatteringMode::All,
                         sample);
 
@@ -647,9 +676,9 @@ void DiagnosticSurfaceShader::evaluate(
 
                     // The 3.0 factor is chosen so that ray spread from Lambertian BRDFs is approximately 1.
                     const double spread =
-                        max(
-                            norm(sample.m_incoming.get_dx()),
-                            norm(sample.m_incoming.get_dy())) * 3.0;
+                        std::max(
+                            norm(sample.m_incoming.get_dx() - sample.m_incoming.get_value()),
+                            norm(sample.m_incoming.get_dy() - sample.m_incoming.get_value())) * 3.0;
                     set_shading_result(
                         shading_result,
                         Color3f(static_cast<float>(spread)));

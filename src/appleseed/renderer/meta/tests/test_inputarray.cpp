@@ -39,24 +39,23 @@
 #include <string>
 
 using namespace renderer;
-using namespace std;
 
 TEST_SUITE(Renderer_Modeling_Input_InputArray)
 {
     TEST_CASE(Find_GivenNameOfExistingInput_ReturnsInputIterator)
     {
         InputArray inputs;
-        inputs.declare("x", InputFormatFloat);
+        inputs.declare("x", InputFormat::Float);
 
         const InputArray::const_iterator i = inputs.find("x");
 
-        EXPECT_EQ("x", string(i.name()));
+        EXPECT_EQ("x", std::string(i.name()));
     }
 
     TEST_CASE(Find_GivenNameOfNonExistingInput_ReturnsEndIterator)
     {
         InputArray inputs;
-        inputs.declare("x", InputFormatFloat);
+        inputs.declare("x", InputFormat::Float);
 
         const InputArray::const_iterator i = inputs.find("y");
 
@@ -66,7 +65,7 @@ TEST_SUITE(Renderer_Modeling_Input_InputArray)
     TEST_CASE(Source_GivenNameOfNonExistingInput_ReturnsZero)
     {
         InputArray inputs;
-        inputs.declare("x", InputFormatFloat);
+        inputs.declare("x", InputFormat::Float);
 
         const Source* source = inputs.source("y");
 
@@ -76,7 +75,7 @@ TEST_SUITE(Renderer_Modeling_Input_InputArray)
     TEST_CASE(Source_GivenNameOfUnboundExistingInput_ReturnsZero)
     {
         InputArray inputs;
-        inputs.declare("x", InputFormatFloat);
+        inputs.declare("x", InputFormat::Float);
 
         const Source* source = inputs.source("x");
 
@@ -86,7 +85,7 @@ TEST_SUITE(Renderer_Modeling_Input_InputArray)
     TEST_CASE(Source_GivenNameOfBoundExistingInput_ReturnsBoundSource)
     {
         InputArray inputs;
-        inputs.declare("x", InputFormatFloat);
+        inputs.declare("x", InputFormat::Float);
 
         Source* expected_source = new ScalarSource(1.0);
         inputs.find("x").bind(expected_source);
